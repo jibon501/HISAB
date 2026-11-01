@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hisab.app.data.Account
+import com.hisab.app.data.Category
+import com.hisab.app.data.MonthItem
 import com.hisab.app.data.Debt
 import com.hisab.app.data.HisabDb
 import com.hisab.app.data.Kind
@@ -24,6 +26,7 @@ data class Summary(
     val dps: Double = 0.0,
     val asset: Double = 0.0,
     val monthExpense: Double = 0.0,
+    val monthBaki: Double = 0.0,
 )
 
 /**
@@ -38,7 +41,9 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var txns by mutableStateOf(emptyList<Txn>())
         private set
-    var monthExpenses by mutableStateOf(emptyList<Txn>())
+    var monthExpenses by mutableStateOf(emptyList<MonthItem>())
+        private set
+    var categories by mutableStateOf(emptyList<Category>())
         private set
     var debts by mutableStateOf(emptyMap<String, List<Debt>>())
         private set
@@ -50,7 +55,8 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     private class Snapshot(
         val accounts: List<Account>,
         val txns: List<Txn>,
-        val monthExpenses: List<Txn>,
+        val monthExpenses: List<MonthItem>,
+        val categories: List<Category>,
         val debts: Map<String, List<Debt>>,
         val summary: Summary,
     )
@@ -62,13 +68,14 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     private fun load(filter: String?): Snapshot {
         val accs = db.accounts()
         val debtMap = listOf(Kind.LOAN, Kind.LENT, Kind.SHOP).associateWith { db.debts(it) }
-        val month = db.monthExpenses()
+        val month = db.monthItems()
         fun sum(vararg types: String) = accs.filter { it.type in types }.sumOf { it.balance }
         fun owed(kind: String) = debtMap[kind].orEmpty().sumOf { it.remaining }
         return Snapshot(
             accounts = accs,
             txns = db.txns(filter),
             monthExpenses = month,
+            categories = db.categories(),
             debts = debtMap,
             summary = Summary(
                 cash = sum("cash", "mobile", "bank"),
@@ -76,8 +83,9 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
                 lent = owed(Kind.LENT),
                 shop = owed(Kind.SHOP),
                 dps = sum("dps"),
-                asset = sum("asset"),
+                asset = sum("asset", "other"),
                 monthExpense = month.sumOf { it.amount },
+                monthBaki = month.sumOf { it.remaining },
             ),
         )
     }
@@ -86,6 +94,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         accounts = s.accounts
         txns = s.txns
         monthExpenses = s.monthExpenses
+        categories = s.categories
         debts = s.debts
         summary = s.summary
     }
@@ -110,6 +119,22 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
 
     fun addTxn(type: String, amount: Double, accountId: Long, category: String, note: String) =
         exec { db.addTxn(type, amount, accountId, category, note) }
+
+    fun addBakiExpense(amount: Double, category: String, note: String) =
+        exec { db.addBakiExpense(amount, category, note) }
+
+    fun addCategory(name: String, kind: String) = exec { db.addCategory(name, kind) }
+
+    fun renameCategory(id: Long, newName: String) = exec { db.renameCategory(id, newName) }
+
+    fun deleteCategory(id: Long) = exec { db.deleteCategory(id) }
+
+    /** দেনা-পাওনা এডিট: নাম বদল এবং (একটি মাত্র হিসাব থাকলে) বাকির পরিমাণ বদল */
+    fun editDebt(kind: String, oldName: String, newName: String, debtId: Long?, newRemaining: Double?) =
+        exec {
+            db.renameDebtPerson(kind, oldName, newName)
+            if (debtId != null && newRemaining != null) db.setDebtRemaining(debtId, newRemaining)
+        }
 
     fun deleteTxn(id: Long) = exec { db.deleteTxn(id) }
 
