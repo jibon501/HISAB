@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # GitHub Release বানানোর জন্য দরকার
 
 env:
   # ভার্সন নাম হবে <MAJOR_VERSION>.<রান নম্বর>, যেমন 1.1, 1.2, 1.3...
@@ -88,3 +88,15 @@ jobs:
           name: hisab-v${{ env.MAJOR_VERSION }}.${{ github.run_number }}
           path: hisab-v*.apk
           if-no-files-found: error
+
+      # Releases পাতায় APK দেওয়া হয়: ট্যাগ v1.<রান নম্বর>, যেমন v1.12
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="${{ env.MAJOR_VERSION }}.${{ github.run_number }}"
+          gh release create "v$VER" "hisab-v$VER.apk" \
+            --title "আমার হিসাব v$VER" \
+            --notes "বিল্ড #${{ github.run_number }} | কমিট ${GITHUB_SHA::7}" \
+            --target "$GITHUB_SHA" \
+            --latest
