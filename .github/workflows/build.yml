@@ -59,10 +59,23 @@ jobs:
           echo "KEYSTORE_PATH=$KS" >> "$GITHUB_ENV"
 
       - name: Build signed Release APK
-        run: >
-          gradle assembleRelease --no-daemon --stacktrace
-          -PappVersionCode=${{ github.run_number }}
-          -PappVersionName=${{ env.MAJOR_VERSION }}.${{ github.run_number }}
+        run: |
+          set -o pipefail
+          gradle assembleRelease --no-daemon --stacktrace \
+            -PappVersionCode=${{ github.run_number }} \
+            -PappVersionName=${{ env.MAJOR_VERSION }}.${{ github.run_number }} 2>&1 | tee build.log
+
+      # বিল্ড ফেইল করলে Kotlin এরর (e: ...) লাইনগুলো রানের Summary পাতায় দেখাবে
+      - name: Show build errors
+        if: failure()
+        run: |
+          {
+            echo '### বিল্ড এরর'
+            echo '```'
+            grep -E '^e: |^w: .*error|What went wrong' -A2 build.log | head -80 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^e: ' build.log || true
 
       - name: Rename APK
         run: |
