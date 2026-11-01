@@ -92,7 +92,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setFilter(category: String?) {
+    fun applyFilter(category: String?) {
         filter = category
         exec { }
     }
