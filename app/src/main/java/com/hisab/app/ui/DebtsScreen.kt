@@ -114,8 +114,8 @@ fun DebtsScreen(vm: HisabViewModel) {
         AddDebtDialog(
             kind = kind,
             accounts = vm.accounts,
-            // আগে সেভ করা নামগুলো (সাম্প্রতিক আগে), পরের বার সাজেশন হিসেবে দেখাবে
-            suggestions = list.map { it.person }.distinct(),
+            // আগে সেভ করা সব নাম (সাম্প্রতিক আগে), লিখতে শুরু করলে সাজেশন হিসেবে দেখাবে
+            suggestions = vm.debts.values.flatten().sortedByDescending { it.id }.map { it.person }.distinct(),
             onDismiss = { showAdd = false },
             onSave = { person, total, note, accId ->
                 vm.addDebt(kind, person, total, note, accId)
@@ -170,19 +170,32 @@ private fun AddDebtDialog(
         },
     ) {
         TextInput(person, { person = it }, personLabel)
-        // আগের নামের সাজেশন: লিখতে থাকলে মিলে যাওয়াগুলো দেখায়, ট্যাপ করলে নাম বসে যায়
+        // নামের অক্ষর লিখলেই মিলে যাওয়া আগের নামগুলো দেখায় (শুরুতে মিললে আগে), ট্যাপ করলে নাম বসে যায়
         val q = person.trim()
-        val shown = suggestions
-            .filter { q.isEmpty() || (it.contains(q, ignoreCase = true) && !it.equals(q, ignoreCase = true)) }
-            .take(10)
+        val shown = if (q.isEmpty()) {
+            emptyList()
+        } else {
+            suggestions
+                .filter { it.contains(q, ignoreCase = true) && !it.equals(q, ignoreCase = true) }
+                .sortedByDescending { it.startsWith(q, ignoreCase = true) }
+                .take(5)
+        }
         if (shown.isNotEmpty()) {
-            Text("আগের নাম (ট্যাপ করুন)", style = MaterialTheme.typography.labelSmall)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Surface(
+                tonalElevation = 3.dp,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                shown.forEach { n ->
-                    SuggestionChip(onClick = { person = n }, label = { Text(n) })
+                Column {
+                    shown.forEach { n ->
+                        Text(
+                            n,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { person = n }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                        )
+                    }
                 }
             }
         }

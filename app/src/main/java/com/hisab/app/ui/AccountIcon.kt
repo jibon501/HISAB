@@ -26,7 +26,7 @@ private fun logoKeys(a: Account): List<String> {
         "bkash" in n || "বিকাশ" in n -> keys += "acc_bkash"
         "nagad" in n || "নগদ" in n -> keys += "acc_nagad"
         n.startsWith("ab ") || n == "ab" -> keys += "acc_ab_bank"
-        "tfic" in n -> keys += "acc_tfic"
+        "tfic" in n || "ific" in n -> keys += "acc_tfic"
     }
     keys += "acc_type_${a.type}"
     return keys

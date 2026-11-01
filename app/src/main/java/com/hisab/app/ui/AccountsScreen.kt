@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Account
 
-/** অ্যাকাউন্ট ও সম্পদের তালিকা। অ্যাকাউন্টে ট্যাপ করলে নাম/আইকন বদল বা মোছা যায় */
+/** অ্যাকাউন্ট ও সম্পদের তালিকা। অ্যাকাউন্টে ট্যাপ করলে নাম বদল বা মোছা যায় */
 @Composable
 fun AccountsScreen(vm: HisabViewModel) {
     val ctx = LocalContext.current
@@ -92,8 +92,8 @@ fun AccountsScreen(vm: HisabViewModel) {
         EditAccountDialog(
             account = a,
             onDismiss = { editing = null },
-            onSave = { name, icon ->
-                vm.updateAccount(a.id, name, icon)
+            onSave = { name ->
+                vm.updateAccount(a.id, name, a.icon)
                 editing = null
             },
             onDelete = {
@@ -130,7 +130,6 @@ private fun AddAccountDialog(
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("bank") }
     var opening by remember { mutableStateOf("") }
-    var icon by remember { mutableStateOf(defaultIconKey("bank")) }
 
     FormDialog(
         title = "নতুন অ্যাকাউন্ট",
@@ -138,31 +137,27 @@ private fun AddAccountDialog(
         onDismiss = onDismiss,
         onConfirm = {
             if (name.isBlank()) ctx.toast("অ্যাকাউন্টের নাম দিন")
-            else onSave(name.trim(), type, opening.toDoubleOrNull() ?: 0.0, icon)
+            else onSave(name.trim(), type, opening.toDoubleOrNull() ?: 0.0, defaultIconKey(type))
         },
     ) {
         TextInput(name, { name = it }, "অ্যাকাউন্টের নাম")
         Picker("ধরন", TYPE_LABELS.keys.toList(), type, { TYPE_LABELS.getValue(it) }) {
             type = it
-            icon = defaultIconKey(it)
         }
-        Text("আইকন", style = MaterialTheme.typography.labelMedium)
-        IconPicker(icon) { icon = it }
         MoneyField(opening, { opening = it }, "শুরুর ব্যালেন্স")
     }
 }
 
-/** নাম ও আইকন বদল (সংরক্ষণ) অথবা অ্যাকাউন্ট মোছার অপশন */
+/** নাম বদল (সংরক্ষণ) অথবা অ্যাকাউন্ট মোছার অপশন */
 @Composable
 private fun EditAccountDialog(
     account: Account,
     onDismiss: () -> Unit,
-    onSave: (name: String, icon: String) -> Unit,
+    onSave: (name: String) -> Unit,
     onDelete: () -> Unit,
 ) {
     val ctx = LocalContext.current
     var name by remember(account.id) { mutableStateOf(account.name) }
-    var icon by remember(account.id) { mutableStateOf(iconFor(account).key) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -170,8 +165,6 @@ private fun EditAccountDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextInput(name, { name = it }, "অ্যাকাউন্টের নাম")
-                Text("আইকন", style = MaterialTheme.typography.labelMedium)
-                IconPicker(icon) { icon = it }
                 TextButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
@@ -181,7 +174,7 @@ private fun EditAccountDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isBlank()) ctx.toast("নাম খালি রাখা যাবে না") else onSave(name.trim(), icon)
+                if (name.isBlank()) ctx.toast("নাম খালি রাখা যাবে না") else onSave(name.trim())
             }) { Text("সংরক্ষণ") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("বাতিল") } },

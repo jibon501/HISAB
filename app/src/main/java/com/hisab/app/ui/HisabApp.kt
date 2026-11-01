@@ -1,6 +1,9 @@
 package com.hisab.app.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Dashboard
@@ -12,14 +15,12 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hisab.app.HisabViewModel
+import kotlinx.coroutines.launch
 
 private data class NavTab(val label: String, val icon: ImageVector)
 
@@ -30,18 +31,19 @@ private val TABS = listOf(
     NavTab("অ্যাকাউন্ট", Icons.Default.AccountBalanceWallet),
 )
 
-/** অ্যাপের মূল কাঠামো: নিচে ৪টি ট্যাব */
+/** অ্যাপের মূল কাঠামো: নিচে ৪টি ট্যাব। স্ক্রিন ধরে ডানে-বামে টানলেও ট্যাব বদলায় */
 @Composable
 fun HisabApp(vm: HisabViewModel = viewModel()) {
-    var tab by rememberSaveable { mutableStateOf(0) }
+    val pager = rememberPagerState(pageCount = { TABS.size })
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         bottomBar = {
             NavigationBar {
                 TABS.forEachIndexed { i, t ->
                     NavigationBarItem(
-                        selected = tab == i,
-                        onClick = { tab = i },
+                        selected = pager.currentPage == i,
+                        onClick = { scope.launch { pager.animateScrollToPage(i) } },
                         icon = { Icon(t.icon, contentDescription = t.label) },
                         label = { Text(t.label) },
                     )
@@ -49,13 +51,14 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
             }
         },
     ) { pad ->
-        val m = Modifier.padding(pad)
-        androidx.compose.foundation.layout.Box(m) {
-            when (tab) {
-                0 -> DashboardScreen(vm)
-                1 -> TransactionsScreen(vm)
-                2 -> DebtsScreen(vm)
-                else -> AccountsScreen(vm)
+        HorizontalPager(state = pager, modifier = Modifier.padding(pad)) { page ->
+            Box {
+                when (page) {
+                    0 -> DashboardScreen(vm)
+                    1 -> TransactionsScreen(vm)
+                    2 -> DebtsScreen(vm)
+                    else -> AccountsScreen(vm)
+                }
             }
         }
     }

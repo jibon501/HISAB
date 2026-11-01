@@ -5,6 +5,7 @@ package com.hisab.app.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
@@ -26,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,6 +57,7 @@ fun TransactionsScreen(vm: HisabViewModel) {
     var showAdd by remember { mutableStateOf(false) }
     var showTransfer by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    var showCats by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<Txn?>(null) }
 
     Scaffold(
@@ -61,6 +65,9 @@ fun TransactionsScreen(vm: HisabViewModel) {
             TopAppBar(
                 title = { Text(vm.filter?.let { "লেনদেন • $it" } ?: "লেনদেন") },
                 actions = {
+                    IconButton(onClick = { showCats = true }) {
+                        Icon(Icons.Default.Category, contentDescription = "খাত")
+                    }
                     IconButton(onClick = { showTransfer = true }) {
                         Icon(Icons.Default.CompareArrows, contentDescription = "ট্রান্সফার")
                     }
@@ -77,7 +84,7 @@ fun TransactionsScreen(vm: HisabViewModel) {
                                 text = { Text("সব খাত") },
                                 onClick = { vm.applyFilter(null); menu = false },
                             )
-                            ALL_CATS.forEach { c ->
+                            (vm.categories.map { it.name }.distinct() + SYSTEM_CATS).forEach { c ->
                                 DropdownMenuItem(
                                     text = { Text(c) },
                                     onClick = { vm.applyFilter(c); menu = false },
@@ -110,11 +117,24 @@ fun TransactionsScreen(vm: HisabViewModel) {
     if (showAdd) {
         AddTxnDialog(
             accounts = vm.accounts,
+            expenseCats = vm.categories.filter { it.kind == "expense" }.map { it.name },
+            incomeCats = vm.categories.filter { it.kind == "income" }.map { it.name },
+            onManageCats = { showCats = true },
             onDismiss = { showAdd = false },
-            onSave = { type, amount, accId, cat, note ->
-                vm.addTxn(type, amount, accId, cat, note)
+            onSave = { type, amount, accId, cat, note, baki ->
+                if (baki) vm.addBakiExpense(amount, cat, note)
+                else if (accId != null) vm.addTxn(type, amount, accId, cat, note)
                 showAdd = false
             },
+        )
+    }
+    if (showCats) {
+        CategoriesDialog(
+            categories = vm.categories,
+            onAdd = { name, kind -> vm.addCategory(name, kind) },
+            onRename = { id, name -> vm.renameCategory(id, name) },
+            onDelete = { id -> vm.deleteCategory(id) },
+            onDismiss = { showCats = false },
         )
     }
     if (showTransfer) {
@@ -175,8 +195,11 @@ private fun TxnRow(t: Txn, onDelete: () -> Unit) {
 @Composable
 private fun AddTxnDialog(
     accounts: List<Account>,
+    expenseCats: List<String>,
+    incomeCats: List<String>,
+    onManageCats: () -> Unit,
     onDismiss: () -> Unit,
-    onSave: (type: String, amount: Double, accountId: Long, category: String, note: String) -> Unit,
+    onSave: (type: String, amount: Double, accountId: Long?, category: String, note: String, baki: Boolean) -> Unit,
 ) {
     val ctx = LocalContext.current
     var type by remember { mutableStateOf("debit") }
@@ -184,6 +207,7 @@ private fun AddTxnDialog(
     var cat by remember { mutableStateOf<String?>(null) }
     var acc by remember { mutableStateOf<Account?>(null) }
     var note by remember { mutableStateOf("") }
+    var baki by remember { mutableStateOf(false) }
 
     FormDialog(
         title = "নতুন লেনদেন",
@@ -193,10 +217,11 @@ private fun AddTxnDialog(
             val a = amount.toDoubleOrNull()
             val c = cat
             val ac = acc
-            if (a == null || a <= 0 || c == null || ac == null) {
-                ctx.toast("পরিমাণ, খাত ও অ্যাকাউন্ট সিলেক্ট করুন")
+            val isBaki = type == "debit" && baki
+            if (a == null || a <= 0 || c == null || (!isBaki && ac == null)) {
+                ctx.toast(if (isBaki) "পরিমাণ ও খাত সিলেক্ট করুন" else "পরিমাণ, খাত ও অ্যাকাউন্ট সিলেক্ট করুন")
             } else {
-                onSave(type, a, ac.id, c, note.trim())
+                onSave(type, a, ac?.id, c, note.trim(), isBaki)
             }
         },
     ) {
@@ -213,13 +238,26 @@ private fun AddTxnDialog(
             )
         }
         MoneyField(amount) { amount = it }
-        Picker("খাত", if (type == "debit") EXPENSE_CATS else INCOME_CATS, cat, { it }) { cat = it }
-        Picker(
-            label = if (type == "debit") "কোন অ্যাকাউন্ট থেকে কাটবে" else "কোন অ্যাকাউন্টে জমা হবে",
-            options = accounts,
-            selected = acc,
-            text = { "${it.name} (${tk(it.balance)})" },
-        ) { acc = it }
+        Picker("খাত", if (type == "debit") expenseCats else incomeCats, cat, { it }) { cat = it }
+        TextButton(onClick = onManageCats) { Text("খাত এডিট / মুছা / যোগ করা") }
+        if (type == "debit") {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("বাকি (এখনো টাকা দিইনি)")
+                Switch(checked = baki, onCheckedChange = { baki = it })
+            }
+        }
+        if (!(type == "debit" && baki)) {
+            Picker(
+                label = if (type == "debit") "কোন অ্যাকাউন্ট থেকে কাটবে" else "কোন অ্যাকাউন্টে জমা হবে",
+                options = accounts,
+                selected = acc,
+                text = { "${it.name} (${tk(it.balance)})" },
+            ) { acc = it }
+        }
         TextInput(note, { note = it }, "নোট (ঐচ্ছিক)")
     }
 }

@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,51 +46,64 @@ import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Kind
 
 /** কোন কার্ডে ট্যাপ করা হয়েছে */
-private enum class Detail(val title: String) {
-    CASH("ক্যাশ"),
-    LOAN("মোট লোন"),
-    LENT("মোট পাওনা"),
-    SHOP("দোকান বাকি"),
-    DPS("ডিপিএস মোট"),
-    ASSET("জমি/সম্পদ"),
-    EXPENSE("এই মাসের খরচ"),
+private enum class Detail {
+    CASH, LENT, LOAN, SHOP, EXPENSE, DPS, ASSET
 }
 
-/** হোম স্ক্রিন: সারসংক্ষেপ কার্ড। কার্ডে ট্যাপ করলে বিস্তারিত তালিকা (শুধু দেখা যায়) */
+/** তালিকার একটি সারি। kind থাকলে (দেনা-পাওনা) নামে ট্যাপ করে এডিট করা যায় */
+private data class DRow(
+    val name: String,
+    val value: Double,
+    val sub: String? = null,
+    val kind: String? = null,
+)
+
+/** হোম স্ক্রিন: সারসংক্ষেপ কার্ড। কার্ডে ট্যাপ করলে বিস্তারিত তালিকা */
 @Composable
 fun DashboardScreen(vm: HisabViewModel) {
     val s = vm.summary
     var detail by remember { mutableStateOf<Detail?>(null) }
+    var editing by remember { mutableStateOf<Pair<String, String>?>(null) } // (ধরন, নাম)
 
     LazyColumn(
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { SummaryCard("ক্যাশ", s.cash, Color(0xFF00897B), Icons.Default.Payments, big = true) { detail = Detail.CASH } }
-        item { SummaryCard("মোট লোন", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
         item { SummaryCard("মোট পাওনা", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
+        item { SummaryCard("মোট লোন", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
         item { SummaryCard("দোকান বাকি", s.shop, Color(0xFFFB8C00), Icons.Default.Store) { detail = Detail.SHOP } }
-        item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
-        item { SummaryCard("জমি/সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
         item { SummaryCard("এই মাসের খরচ", s.monthExpense, Color(0xFF8E24AA), Icons.Default.ShoppingCart) { detail = Detail.EXPENSE } }
+        item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
+        item { SummaryCard("সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
     }
 
     detail?.let { d ->
-        DetailDialog(d.title, rowsFor(d, vm)) { detail = null }
+        DetailDialog(
+            rows = rowsFor(d, vm),
+            // মাসের খরচ কার্ডে ট্যাপ করলে বাকির অংশ আলাদা দেখায়
+            baki = if (d == Detail.EXPENSE) s.monthBaki else null,
+            onEdit = { kind, person -> editing = kind to person },
+            onDismiss = { detail = null },
+        )
+    }
+
+    editing?.let { (kind, person) ->
+        EditDebtDialog(vm, kind, person) { editing = null }
     }
 }
 
-/** কার্ড অনুযায়ী তালিকার সারি (নাম, পরিমাণ) */
-private fun rowsFor(d: Detail, vm: HisabViewModel): List<Pair<String, Double>> {
+/** কার্ড অনুযায়ী তালিকার সারি */
+private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
     fun accounts(vararg types: String) =
-        vm.accounts.filter { it.type in types }.map { it.name to it.balance }
+        vm.accounts.filter { it.type in types }.map { DRow(it.name, it.balance) }
 
     // একই নামের একাধিক হিসাব যোগ করে মোট দেখায়
     fun owed(kind: String) = vm.debts[kind].orEmpty()
         .filter { it.remaining > 0 }
         .groupBy { it.person }
-        .map { (person, list) -> person to list.sumOf { it.remaining } }
-        .sortedByDescending { it.second }
+        .map { (person, list) -> DRow(person, list.sumOf { it.remaining }, kind = kind) }
+        .sortedByDescending { it.value }
 
     return when (d) {
         Detail.CASH -> accounts("cash", "mobile", "bank")
@@ -97,36 +111,62 @@ private fun rowsFor(d: Detail, vm: HisabViewModel): List<Pair<String, Double>> {
         Detail.LENT -> owed(Kind.LENT)
         Detail.SHOP -> owed(Kind.SHOP)
         Detail.DPS -> accounts("dps")
-        Detail.ASSET -> accounts("asset")
-        Detail.EXPENSE -> vm.monthExpenses.map { "${it.category} • ${it.date.take(10)}" to it.amount }
+        Detail.ASSET -> accounts("asset", "other")
+        Detail.EXPENSE -> vm.monthExpenses.map {
+            DRow(it.title, it.amount, sub = if (it.remaining > 0) "বাকি ${tk(it.remaining)}" else null)
+        }
     }
 }
 
-/** শুধু দেখার জন্য তালিকা: কোনো এডিট নেই */
+/** তালিকা। কার্ডের নাম এখানে দেখানো হয় না; নিচে "বন্ধ করুন" বাটন */
 @Composable
-private fun DetailDialog(title: String, rows: List<Pair<String, Double>>, onDismiss: () -> Unit) {
+private fun DetailDialog(
+    rows: List<DRow>,
+    baki: Double?,
+    onEdit: (kind: String, person: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
         text = {
             Column {
                 Text(
-                    "মোট: ${tk(rows.sumOf { it.second })}",
+                    "মোট: ${tk(rows.sumOf { it.value })}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
+                if (baki != null) {
+                    Text(
+                        "বাকি: ${tk(baki)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE53935),
+                    )
+                }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 if (rows.isEmpty()) {
                     Text("কোনো তথ্য নেই")
                 } else {
                     LazyColumn(Modifier.heightIn(max = 360.dp)) {
-                        items(rows) { (name, value) ->
+                        items(rows) { row ->
+                            val tap = row.kind
                             Row(
-                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                Modifier
+                                    .fillMaxWidth()
+                                    .then(if (tap != null) Modifier.clickable { onEdit(tap, row.name) } else Modifier)
+                                    .padding(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Text(name, modifier = Modifier.weight(1f))
-                                Text(tk(value), fontWeight = FontWeight.Bold)
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        row.name,
+                                        color = if (tap != null) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                    )
+                                    if (row.sub != null) {
+                                        Text(row.sub, fontSize = 12.sp, color = Color(0xFFE53935))
+                                    }
+                                }
+                                Text(tk(row.value), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -135,6 +175,41 @@ private fun DetailDialog(title: String, rows: List<Pair<String, Double>>, onDism
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("বন্ধ করুন") } },
     )
+}
+
+/** দেনা-পাওনার নামে ট্যাপ করলে: নাম বদল এবং (একটি মাত্র হিসাব থাকলে) বাকির পরিমাণ বদল */
+@Composable
+private fun EditDebtDialog(vm: HisabViewModel, kind: String, person: String, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val mine = vm.debts[kind].orEmpty().filter { it.person == person && it.remaining > 0 }
+    val single = mine.singleOrNull()
+    var name by remember(kind, person) { mutableStateOf(person) }
+    var remaining by remember(kind, person) {
+        mutableStateOf(single?.remaining?.let { r -> if (r % 1.0 == 0.0) r.toLong().toString() else r.toString() } ?: "")
+    }
+
+    FormDialog(
+        title = "সম্পাদনা",
+        confirmText = "সংরক্ষণ",
+        onDismiss = onDone,
+        onConfirm = {
+            val n = name.trim()
+            val r = remaining.toDoubleOrNull()
+            when {
+                n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
+                single != null && (r == null || r <= 0) -> ctx.toast("সঠিক পরিমাণ দিন")
+                else -> {
+                    vm.editDebt(kind, person, n, single?.id, if (single != null) r else null)
+                    onDone()
+                }
+            }
+        },
+    ) {
+        TextInput(name, { name = it }, "নাম")
+        if (single != null) {
+            MoneyField(remaining, { remaining = it }, "বাকির পরিমাণ")
+        }
+    }
 }
 
 @Composable
