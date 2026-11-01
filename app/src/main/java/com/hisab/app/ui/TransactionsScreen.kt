@@ -75,12 +75,12 @@ fun TransactionsScreen(vm: HisabViewModel) {
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(
                                 text = { Text("সব খাত") },
-                                onClick = { vm.setFilter(null); menu = false },
+                                onClick = { vm.applyFilter(null); menu = false },
                             )
                             ALL_CATS.forEach { c ->
                                 DropdownMenuItem(
                                     text = { Text(c) },
-                                    onClick = { vm.setFilter(c); menu = false },
+                                    onClick = { vm.applyFilter(c); menu = false },
                                 )
                             }
                         }
