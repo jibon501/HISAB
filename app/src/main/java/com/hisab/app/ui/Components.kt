@@ -111,8 +111,15 @@ fun <T> Picker(
     }
 }
 
+/** ডিফল্ট লেবেলসহ: MoneyField(x) { x = it } */
 @Composable
-fun MoneyField(value: String, onChange: (String) -> Unit, label: String = "টাকার পরিমাণ") {
+fun MoneyField(value: String, onChange: (String) -> Unit) {
+    MoneyField(value, onChange, "টাকার পরিমাণ")
+}
+
+/** কাস্টম লেবেলসহ: MoneyField(x, { x = it }, "লেবেল") */
+@Composable
+fun MoneyField(value: String, onChange: (String) -> Unit, label: String) {
     OutlinedTextField(
         value = value,
         onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) onChange(s) },
