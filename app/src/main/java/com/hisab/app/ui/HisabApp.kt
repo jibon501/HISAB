@@ -21,13 +21,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hisab.app.HisabViewModel
 
-private data class Tab(val label: String, val icon: ImageVector)
+private data class NavTab(val label: String, val icon: ImageVector)
 
 private val TABS = listOf(
-    Tab("ড্যাশবোর্ড", Icons.Default.Dashboard),
-    Tab("লেনদেন", Icons.Default.Receipt),
-    Tab("দেনা-পাওনা", Icons.Default.SwapHoriz),
-    Tab("অ্যাকাউন্ট", Icons.Default.AccountBalanceWallet),
+    NavTab("ড্যাশবোর্ড", Icons.Default.Dashboard),
+    NavTab("লেনদেন", Icons.Default.Receipt),
+    NavTab("দেনা-পাওনা", Icons.Default.SwapHoriz),
+    NavTab("অ্যাকাউন্ট", Icons.Default.AccountBalanceWallet),
 )
 
 /** অ্যাপের মূল কাঠামো: নিচে ৪টি ট্যাব */
