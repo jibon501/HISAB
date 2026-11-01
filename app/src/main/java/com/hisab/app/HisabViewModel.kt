@@ -38,18 +38,24 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var txns by mutableStateOf(emptyList<Txn>())
         private set
+    var monthExpenses by mutableStateOf(emptyList<Txn>())
+        private set
     var debts by mutableStateOf(emptyMap<String, List<Debt>>())
         private set
     var summary by mutableStateOf(Summary())
         private set
     var filter by mutableStateOf<String?>(null)
         private set
+    var monthByCategory by mutableStateOf(emptyList<Pair<String, Double>>())
+        private set
 
     private class Snapshot(
         val accounts: List<Account>,
         val txns: List<Txn>,
+        val monthExpenses: List<Txn>,
         val debts: Map<String, List<Debt>>,
         val summary: Summary,
+        val monthByCategory: List<Pair<String, Double>>,
     )
 
     init {
@@ -59,12 +65,15 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     private fun load(filter: String?): Snapshot {
         val accs = db.accounts()
         val debtMap = listOf(Kind.LOAN, Kind.LENT, Kind.SHOP).associateWith { db.debts(it) }
+        val month = db.monthExpenses()
         fun sum(vararg types: String) = accs.filter { it.type in types }.sumOf { it.balance }
         fun owed(kind: String) = debtMap[kind].orEmpty().sumOf { it.remaining }
         return Snapshot(
             accounts = accs,
             txns = db.txns(filter),
+            monthExpenses = month,
             debts = debtMap,
+            monthByCategory = db.monthExpenseByCategory(),
             summary = Summary(
                 cash = sum("cash", "mobile", "bank"),
                 loan = owed(Kind.LOAN),
@@ -72,9 +81,17 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
                 shop = owed(Kind.SHOP),
                 dps = sum("dps"),
                 asset = sum("asset"),
-                monthExpense = db.monthExpense(),
+                monthExpense = month.sumOf { it.amount },
             ),
         )
+    }
+
+    private fun publish(s: Snapshot) {
+        accounts = s.accounts
+        txns = s.txns
+        monthExpenses = s.monthExpenses
+        debts = s.debts
+        summary = s.summary
     }
 
     /** ডাটাবেসে কাজ করে সব স্টেট রিফ্রেশ করে */
@@ -85,13 +102,11 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
                 block()
                 load(f)
             }
-            accounts = s.accounts
-            txns = s.txns
-            debts = s.debts
-            summary = s.summary
+            publish(s)
         }
     }
 
+    // নোট: `setFilter` নাম দেওয়া যাবে না, কারণ `filter` প্রপার্টির সেটারের সাথে মিলে যায়
     fun applyFilter(category: String?) {
         filter = category
         exec { }
@@ -105,8 +120,24 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     fun transfer(fromId: Long, toId: Long, amount: Double) =
         exec { db.transfer(fromId, toId, amount) }
 
-    fun addAccount(name: String, type: String, opening: Double) =
-        exec { db.addAccount(name, type, opening) }
+    fun addAccount(name: String, type: String, opening: Double, icon: String) =
+        exec { db.addAccount(name, type, opening, icon) }
+
+    fun updateAccount(id: Long, name: String, icon: String) =
+        exec { db.updateAccount(id, name, icon) }
+
+    /** ডিলিট হলে true; অ্যাকাউন্টে লেনদেন থাকলে ডিলিট না হয়ে false */
+    fun deleteAccount(id: Long, onDone: (Boolean) -> Unit) {
+        val f = filter
+        viewModelScope.launch {
+            val (ok, s) = withContext(Dispatchers.IO) {
+                val ok = db.deleteAccount(id)
+                ok to load(f)
+            }
+            publish(s)
+            onDone(ok)
+        }
+    }
 
     fun addDebt(kind: String, person: String, total: Double, note: String, accountId: Long?) =
         exec { db.addDebt(kind, person, total, note, accountId) }
