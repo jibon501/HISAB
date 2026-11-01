@@ -2,6 +2,7 @@ package com.hisab.app.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
@@ -10,7 +11,13 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 // ---------- মডেল ----------
-data class Account(val id: Long, val name: String, val type: String, val balance: Double)
+data class Account(
+    val id: Long,
+    val name: String,
+    val type: String,
+    val balance: Double,
+    val icon: String, // আইকনের কী (খালি থাকলে ধরন অনুযায়ী ডিফল্ট)
+)
 
 data class Txn(
     val id: Long,
@@ -41,13 +48,16 @@ object Kind {
 /**
  * SQLite ডাটাবেস (ফোনেই থাকে, ইন্টারনেট লাগে না)।
  * সব লেনদেনে অ্যাকাউন্ট বাধ্যতামূলক, তাই ব্যালেন্স সবসময় মিলে যায়।
+ *
+ * ভার্সন ২: অ্যাকাউন্টে আইকন কলাম যোগ হয়েছে।
  */
-class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 1) {
+class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE accounts(id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "name TEXT NOT NULL, type TEXT NOT NULL, opening REAL NOT NULL DEFAULT 0)"
+                "name TEXT NOT NULL, type TEXT NOT NULL, opening REAL NOT NULL DEFAULT 0, " +
+                "icon TEXT NOT NULL DEFAULT '')"
         )
         db.execSQL(
             "CREATE TABLE debts(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, " +
@@ -59,28 +69,31 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 1)
                 "note TEXT NOT NULL DEFAULT '', date TEXT NOT NULL, debt_id INTEGER, " +
                 "is_payment INTEGER NOT NULL DEFAULT 0, ref TEXT)"
         )
-        // শুরুর অ্যাকাউন্ট
+        // শুরুর অ্যাকাউন্ট (নাম, ধরন, আইকন)
         val seed = listOf(
-            "ক্যাশ" to "cash",
-            "বিকাশ" to "mobile",
-            "নগদ" to "mobile",
-            "AB Bank" to "bank",
-            "TFIC Bank" to "bank",
-            "DPS ১" to "dps",
-            "DPS ২" to "dps",
-            "জমি (ইনভেস্ট)" to "asset",
+            Triple("ক্যাশ", "cash", "cash"),
+            Triple("বিকাশ", "mobile", "phone"),
+            Triple("নগদ", "mobile", "phone2"),
+            Triple("AB Bank", "bank", "bank"),
+            Triple("TFIC Bank", "bank", "bank2"),
+            Triple("DPS ১", "dps", "savings"),
+            Triple("DPS ২", "dps", "savings2"),
+            Triple("জমি (ইনভেস্ট)", "asset", "land"),
         )
-        seed.forEach { (name, type) ->
+        seed.forEach { (name, type, icon) ->
             db.insert("accounts", null, ContentValues().apply {
                 put("name", name)
                 put("type", type)
                 put("opening", 0.0)
+                put("icon", icon)
             })
         }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // ভবিষ্যতে স্কিমা বদলালে এখানে মাইগ্রেশন লিখুন
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE accounts ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
+        }
     }
 
     // ---------- অ্যাকাউন্ট ----------
@@ -89,22 +102,54 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 1)
             """
             SELECT a.id, a.name, a.type,
                    a.opening + IFNULL((SELECT SUM(CASE WHEN t.type='credit' THEN t.amount ELSE -t.amount END)
-                                       FROM txns t WHERE t.account_id = a.id), 0)
+                                       FROM txns t WHERE t.account_id = a.id), 0),
+                   a.icon
             FROM accounts a ORDER BY a.id
             """.trimIndent(),
             null,
         ).use { c ->
             buildList {
-                while (c.moveToNext()) add(Account(c.getLong(0), c.getString(1), c.getString(2), c.getDouble(3)))
+                while (c.moveToNext()) {
+                    add(Account(c.getLong(0), c.getString(1), c.getString(2), c.getDouble(3), c.getString(4)))
+                }
             }
         }
 
-    fun addAccount(name: String, type: String, opening: Double) {
+    fun addAccount(name: String, type: String, opening: Double, icon: String) {
         writableDatabase.insertOrThrow("accounts", null, ContentValues().apply {
             put("name", name)
             put("type", type)
             put("opening", opening)
+            put("icon", icon)
         })
+    }
+
+    /** নাম ও আইকন বদলানো */
+    fun updateAccount(id: Long, name: String, icon: String) {
+        writableDatabase.update(
+            "accounts",
+            ContentValues().apply {
+                put("name", name)
+                put("icon", icon)
+            },
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+    }
+
+    /**
+     * অ্যাকাউন্ট ডিলিট। লেনদেন থাকলে ডিলিট হয় না (false ফেরত দেয়),
+     * কারণ তাহলে অন্য হিসাব (লোন/ডিপিএস ইত্যাদি) এলোমেলো হয়ে যাবে।
+     */
+    fun deleteAccount(id: Long): Boolean {
+        val db = writableDatabase
+        val used = db.rawQuery(
+            "SELECT COUNT(*) FROM txns WHERE account_id = ?",
+            arrayOf(id.toString()),
+        ).use { c -> c.moveToFirst() && c.getInt(0) > 0 }
+        if (used) return false
+        db.delete("accounts", "id = ?", arrayOf(id.toString()))
+        return true
     }
 
     // ---------- লেনদেন ----------
@@ -137,6 +182,12 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 1)
         insertTxn(writableDatabase, type, amount, accountId, category, note)
     }
 
+    private fun Cursor.toTxns(): List<Txn> = buildList {
+        while (moveToNext()) {
+            add(Txn(getLong(0), getString(1), getDouble(2), getString(3), getString(4), getString(5), getString(6)))
+        }
+    }
+
     fun txns(category: String?): List<Txn> {
         val where = if (category == null) "" else "WHERE t.category = ?"
         val args = if (category == null) null else arrayOf(category)
@@ -147,18 +198,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 1)
             $where ORDER BY t.id DESC
             """.trimIndent(),
             args,
-        ).use { c ->
-            buildList {
-                while (c.moveToNext()) {
-                    add(
-                        Txn(
-                            c.getLong(0), c.getString(1), c.getDouble(2), c.getString(3),
-                            c.getString(4), c.getString(5), c.getString(6),
-                        )
-                    )
-                }
-            }
-        }
+        ).use { c -> c.toTxns() }
     }
 
     /** ট্রান্সফারের দুই দিকই একসাথে মুছে যায় (ref একই) */
@@ -179,14 +219,18 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 1)
         }
     }
 
-    /** চলতি মাসের খরচ (ট্রান্সফার ও দেনা-পাওনা বাদে) */
-    fun monthExpense(): Double {
+    /** চলতি মাসের খরচের তালিকা (ট্রান্সফার ও দেনা-পাওনা বাদে) */
+    fun monthExpenses(): List<Txn> {
         val start = LocalDate.now().withDayOfMonth(1).atStartOfDay().toString()
         return readableDatabase.rawQuery(
-            "SELECT IFNULL(SUM(amount), 0) FROM txns WHERE type='debit' AND debt_id IS NULL " +
-                "AND category != 'ট্রান্সফার' AND date >= ?",
+            """
+            SELECT t.id, t.type, t.amount, IFNULL(a.name, ''), t.category, t.note, t.date
+            FROM txns t LEFT JOIN accounts a ON a.id = t.account_id
+            WHERE t.type = 'debit' AND t.debt_id IS NULL AND t.category != 'ট্রান্সফার' AND t.date >= ?
+            ORDER BY t.id DESC
+            """.trimIndent(),
             arrayOf(start),
-        ).use { c -> if (c.moveToFirst()) c.getDouble(0) else 0.0 }
+        ).use { c -> c.toTxns() }
     }
 
     // ---------- দেনা-পাওনা ----------

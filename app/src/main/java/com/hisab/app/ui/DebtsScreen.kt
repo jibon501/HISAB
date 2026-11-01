@@ -10,6 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -109,6 +114,8 @@ fun DebtsScreen(vm: HisabViewModel) {
         AddDebtDialog(
             kind = kind,
             accounts = vm.accounts,
+            // আগে সেভ করা নামগুলো (সাম্প্রতিক আগে), পরের বার সাজেশন হিসেবে দেখাবে
+            suggestions = list.map { it.person }.distinct(),
             onDismiss = { showAdd = false },
             onSave = { person, total, note, accId ->
                 vm.addDebt(kind, person, total, note, accId)
@@ -133,6 +140,7 @@ fun DebtsScreen(vm: HisabViewModel) {
 private fun AddDebtDialog(
     kind: String,
     accounts: List<Account>,
+    suggestions: List<String>,
     onDismiss: () -> Unit,
     onSave: (person: String, total: Double, note: String, accountId: Long?) -> Unit,
 ) {
@@ -162,6 +170,22 @@ private fun AddDebtDialog(
         },
     ) {
         TextInput(person, { person = it }, personLabel)
+        // আগের নামের সাজেশন: লিখতে থাকলে মিলে যাওয়াগুলো দেখায়, ট্যাপ করলে নাম বসে যায়
+        val q = person.trim()
+        val shown = suggestions
+            .filter { q.isEmpty() || (it.contains(q, ignoreCase = true) && !it.equals(q, ignoreCase = true)) }
+            .take(10)
+        if (shown.isNotEmpty()) {
+            Text("আগের নাম (ট্যাপ করুন)", style = MaterialTheme.typography.labelSmall)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                shown.forEach { n ->
+                    SuggestionChip(onClick = { person = n }, label = { Text(n) })
+                }
+            }
+        }
         MoneyField(amount) { amount = it }
         if (kind != Kind.SHOP) {
             Picker(

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- অ্যাকাউন্টের লোগো (acc_*) কোডে নাম ধরে খোঁজা হয়, তাই R8 যেন এগুলো মুছে না ফেলে -->
+<resources
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/acc_*" />

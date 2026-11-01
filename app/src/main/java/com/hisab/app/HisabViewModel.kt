@@ -46,8 +46,6 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var filter by mutableStateOf<String?>(null)
         private set
-    var monthByCategory by mutableStateOf(emptyList<Pair<String, Double>>())
-        private set
 
     private class Snapshot(
         val accounts: List<Account>,
@@ -55,7 +53,6 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         val monthExpenses: List<Txn>,
         val debts: Map<String, List<Debt>>,
         val summary: Summary,
-        val monthByCategory: List<Pair<String, Double>>,
     )
 
     init {
@@ -73,7 +70,6 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
             txns = db.txns(filter),
             monthExpenses = month,
             debts = debtMap,
-            monthByCategory = db.monthExpenseByCategory(),
             summary = Summary(
                 cash = sum("cash", "mobile", "bank"),
                 loan = owed(Kind.LOAN),
