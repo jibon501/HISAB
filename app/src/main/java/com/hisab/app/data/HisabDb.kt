@@ -38,6 +38,15 @@ data class Debt(
     val date: String,
 )
 
+/** খাত (kind: expense = খরচ, income = আয়) */
+data class Category(val id: Long, val name: String, val kind: String)
+
+/** চলতি মাসের খরচের একটি সারি। remaining > 0 হলে সেটা বাকি */
+data class MonthItem(val title: String, val amount: Double, val remaining: Double)
+
+val DEFAULT_EXPENSE_CATS = listOf("খাবার", "বাজার", "বাসা ভাড়া", "যাতায়াত", "বিল", "চিকিৎসা", "শিক্ষা", "বিনোদন", "অন্যান্য")
+val DEFAULT_INCOME_CATS = listOf("বেতন", "ব্যবসা", "উপহার", "অন্যান্য আয়")
+
 /** দেনা-পাওনার ধরন */
 object Kind {
     const val LOAN = "loan" // লোন নেওয়া
@@ -50,8 +59,9 @@ object Kind {
  * সব লেনদেনে অ্যাকাউন্ট বাধ্যতামূলক, তাই ব্যালেন্স সবসময় মিলে যায়।
  *
  * ভার্সন ২: অ্যাকাউন্টে আইকন কলাম যোগ হয়েছে।
+ * ভার্সন ৩: খাত টেবিল, বাকি-খরচ (debts.is_expense) এবং IFIC BANK নাম।
  */
-class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 2) {
+class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -61,7 +71,8 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 2)
         )
         db.execSQL(
             "CREATE TABLE debts(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, " +
-                "person TEXT NOT NULL, total REAL NOT NULL, note TEXT NOT NULL DEFAULT '', date TEXT NOT NULL)"
+                "person TEXT NOT NULL, total REAL NOT NULL, note TEXT NOT NULL DEFAULT '', date TEXT NOT NULL, " +
+                "is_expense INTEGER NOT NULL DEFAULT 0, category TEXT NOT NULL DEFAULT '')"
         )
         db.execSQL(
             "CREATE TABLE txns(id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, " +
@@ -75,11 +86,12 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 2)
             Triple("বিকাশ", "mobile", "phone"),
             Triple("নগদ", "mobile", "phone2"),
             Triple("AB Bank", "bank", "bank"),
-            Triple("TFIC Bank", "bank", "bank2"),
+            Triple("IFIC BANK", "bank", "bank2"),
             Triple("DPS ১", "dps", "savings"),
             Triple("DPS ২", "dps", "savings2"),
             Triple("জমি (ইনভেস্ট)", "asset", "land"),
         )
+        createCategories(db)
         seed.forEach { (name, type, icon) ->
             db.insert("accounts", null, ContentValues().apply {
                 put("name", name)
@@ -94,6 +106,63 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 2)
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE accounts ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
         }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE debts ADD COLUMN is_expense INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE debts ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+            createCategories(db)
+            db.execSQL("UPDATE accounts SET name = 'IFIC BANK' WHERE name = 'TFIC Bank'")
+        }
+    }
+
+    private fun createCategories(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE categories(id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "name TEXT NOT NULL, kind TEXT NOT NULL)"
+        )
+        DEFAULT_EXPENSE_CATS.forEach { insertCategory(db, it, "expense") }
+        DEFAULT_INCOME_CATS.forEach { insertCategory(db, it, "income") }
+    }
+
+    private fun insertCategory(db: SQLiteDatabase, name: String, kind: String) {
+        db.insert("categories", null, ContentValues().apply {
+            put("name", name)
+            put("kind", kind)
+        })
+    }
+
+    // ---------- খাত ----------
+    fun categories(): List<Category> =
+        readableDatabase.rawQuery("SELECT id, name, kind FROM categories ORDER BY id", null).use { c ->
+            buildList {
+                while (c.moveToNext()) add(Category(c.getLong(0), c.getString(1), c.getString(2)))
+            }
+        }
+
+    fun addCategory(name: String, kind: String) {
+        val db = writableDatabase
+        val exists = db.rawQuery(
+            "SELECT COUNT(*) FROM categories WHERE name = ? AND kind = ?",
+            arrayOf(name, kind),
+        ).use { c -> c.moveToFirst() && c.getInt(0) > 0 }
+        if (!exists) insertCategory(db, name, kind)
+    }
+
+    /** নাম বদলালে পুরনো লেনদেনের খাতের নামও বদলে যায় */
+    fun renameCategory(id: Long, newName: String) {
+        val db = writableDatabase
+        val old = db.rawQuery("SELECT name FROM categories WHERE id = ?", arrayOf(id.toString())).use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        } ?: return
+        db.transaction {
+            update("categories", ContentValues().apply { put("name", newName) }, "id = ?", arrayOf(id.toString()))
+            update("txns", ContentValues().apply { put("category", newName) }, "category = ?", arrayOf(old))
+            update("debts", ContentValues().apply { put("category", newName) }, "category = ?", arrayOf(old))
+        }
+    }
+
+    /** খাত মুছলেও পুরনো লেনদেন থাকে (শুধু নতুন লেনদেনে খাতটা আর আসবে না) */
+    fun deleteCategory(id: Long) {
+        writableDatabase.delete("categories", "id = ?", arrayOf(id.toString()))
     }
 
     // ---------- অ্যাকাউন্ট ----------
@@ -219,18 +288,40 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 2)
         }
     }
 
-    /** চলতি মাসের খরচের তালিকা (ট্রান্সফার ও দেনা-পাওনা বাদে) */
-    fun monthExpenses(): List<Txn> {
+    /**
+     * চলতি মাসের খরচ: পরিশোধিত খরচ + বাকি খরচ (ট্রান্সফার ও দেনা-পাওনার লেনদেন বাদে)।
+     * বাকি খরচ পরে পরিশোধ করলে আবার খরচে ধরা হয় না।
+     */
+    fun monthItems(): List<MonthItem> {
         val start = LocalDate.now().withDayOfMonth(1).atStartOfDay().toString()
-        return readableDatabase.rawQuery(
+        val db = readableDatabase
+        val items = mutableListOf<Pair<String, MonthItem>>() // (সাজানোর তারিখ, সারি)
+        db.rawQuery(
             """
-            SELECT t.id, t.type, t.amount, IFNULL(a.name, ''), t.category, t.note, t.date
-            FROM txns t LEFT JOIN accounts a ON a.id = t.account_id
+            SELECT t.category, t.amount, t.date
+            FROM txns t
             WHERE t.type = 'debit' AND t.debt_id IS NULL AND t.category != 'ট্রান্সফার' AND t.date >= ?
-            ORDER BY t.id DESC
             """.trimIndent(),
             arrayOf(start),
-        ).use { c -> c.toTxns() }
+        ).use { c ->
+            while (c.moveToNext()) {
+                items += c.getString(2) to MonthItem("${c.getString(0)} • ${c.getString(2).take(10)}", c.getDouble(1), 0.0)
+            }
+        }
+        db.rawQuery(
+            """
+            SELECT d.category, d.total,
+                   d.total - IFNULL((SELECT SUM(amount) FROM txns WHERE debt_id = d.id AND is_payment = 1), 0),
+                   d.date
+            FROM debts d WHERE d.is_expense = 1 AND d.date >= ?
+            """.trimIndent(),
+            arrayOf(start),
+        ).use { c ->
+            while (c.moveToNext()) {
+                items += c.getString(3) to MonthItem("${c.getString(0)} • ${c.getString(3).take(10)}", c.getDouble(1), c.getDouble(2))
+            }
+        }
+        return items.sortedByDescending { it.first }.map { it.second }
     }
 
     // ---------- দেনা-পাওনা ----------
@@ -279,6 +370,51 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 2)
                     debtId = debtId,
                 )
             }
+        }
+    }
+
+    /** বাকিতে খরচ: অ্যাকাউন্ট থেকে টাকা কাটে না, দোকান বাকিতে জমা হয় এবং মাসের খরচে ধরা হয় */
+    fun addBakiExpense(amount: Double, category: String, note: String) {
+        writableDatabase.insertOrThrow("debts", null, ContentValues().apply {
+            put("kind", Kind.SHOP)
+            put("person", note.ifBlank { category })
+            put("total", amount)
+            put("note", note)
+            put("date", LocalDateTime.now().toString())
+            put("is_expense", 1)
+            put("category", category)
+        })
+    }
+
+    /** নাম বদল: এই ধরনের একই নামের সব হিসাবে প্রযোজ্য */
+    fun renameDebtPerson(kind: String, oldName: String, newName: String) {
+        if (oldName == newName) return
+        writableDatabase.transaction {
+            update(
+                "debts", ContentValues().apply { put("person", newName) },
+                "kind = ? AND person = ?", arrayOf(kind, oldName),
+            )
+            execSQL(
+                "UPDATE txns SET note = ? WHERE debt_id IN (SELECT id FROM debts WHERE kind = ? AND person = ?)",
+                arrayOf(newName, kind, newName),
+            )
+        }
+    }
+
+    /** বাকির পরিমাণ বদল: মোট = এ পর্যন্ত পরিশোধ + নতুন বাকি */
+    fun setDebtRemaining(id: Long, newRemaining: Double) {
+        writableDatabase.transaction {
+            val paid = rawQuery(
+                "SELECT IFNULL(SUM(amount), 0) FROM txns WHERE debt_id = ? AND is_payment = 1",
+                arrayOf(id.toString()),
+            ).use { c -> if (c.moveToFirst()) c.getDouble(0) else 0.0 }
+            val newTotal = paid + newRemaining
+            update("debts", ContentValues().apply { put("total", newTotal) }, "id = ?", arrayOf(id.toString()))
+            // লোন/ধার নেওয়া-দেওয়ার মূল লেনদেনের পরিমাণও মিলিয়ে দেওয়া হয়
+            update(
+                "txns", ContentValues().apply { put("amount", newTotal) },
+                "debt_id = ? AND is_payment = 0", arrayOf(id.toString()),
+            )
         }
     }
 
