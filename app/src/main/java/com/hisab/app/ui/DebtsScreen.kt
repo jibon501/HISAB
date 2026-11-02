@@ -43,10 +43,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.PaddingValues
 import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Account
 import com.hisab.app.data.Debt
 import com.hisab.app.data.Kind
+import com.hisab.app.data.fmtDate
 
 /** ধার দেওয়া / ধার নেওয়া: প্রতিটির আলাদা স্ক্রিন, ডানে ভাসমান (+) বাটন */
 @Composable
@@ -64,17 +67,18 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
             }
         },
     ) { pad ->
-        Column(Modifier.padding(pad)) {
+        Box(Modifier.fillMaxSize().padding(pad)) {
             if (list.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("কোনো হিসাব নেই") }
             } else {
-                LazyColumn {
+                // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি (+) বাটন ও মোটের নিচে ঢাকা না পড়ে
+                LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
                     items(list, key = { it.id }) { d ->
                         val done = d.remaining <= 0.0
                         ListItem(
                             modifier = Modifier.clickable(enabled = !done) { payTarget = d },
                             headlineContent = { Text(d.person) },
-                            supportingContent = { Text("মোট ${tk(d.total)} • ${d.date.take(10)}") },
+                            supportingContent = { Text("মোট ${tk(d.total)} • ${fmtDate(d.date)}") },
                             trailingContent = {
                                 Text(
                                     if (done) "পরিশোধিত ✓" else tk(d.remaining),
@@ -86,6 +90,13 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
                     }
                 }
             }
+            // স্ক্রিনে যা দেখা যাচ্ছে তার মোট বাকি: নিচে বামে, ছোট ও ধূসর
+            Text(
+                "মোট: ${tk(list.sumOf { it.remaining })}",
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp),
+                fontSize = 12.sp,
+                color = Color.Gray,
+            )
         }
     }
 

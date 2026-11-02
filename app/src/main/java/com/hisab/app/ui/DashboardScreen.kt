@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Kind
+import com.hisab.app.data.fmtDate
 
 /** কোন কার্ডে ট্যাপ করা হয়েছে */
 private enum class Detail {
@@ -200,8 +201,20 @@ private fun DetailDialog(
 /** একজনের ধার-হিসাব: কবে কত ধার নেওয়া/দেওয়া, কবে কত ফেরত (শুধু দেখার জন্য, এডিট নেই) */
 @Composable
 private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
     val items = remember(kind, person, vm.debts) { vm.debtHistory(kind, person) }
     val remaining = items.sumOf { if (it.payment) -it.amount else it.amount }
+    val kindLabel = if (kind == Kind.LENT) "ধার দেওয়া" else "ধার নেওয়া"
+    // একবার সেভ করা হলে শেয়ারে একই ছবি ব্যবহার হয়, দুটো কপি হয় না
+    var savedUri by remember(kind, person) { mutableStateOf<android.net.Uri?>(null) }
+
+    fun ensureSaved(): android.net.Uri? {
+        savedUri?.let { return it }
+        val bmp = buildHistoryBitmap(person, kindLabel, items)
+        val uri = saveToGallery(ctx, bmp, "hisab_${person}_${System.currentTimeMillis()}".replace(" ", "_"))
+        savedUri = uri
+        return uri
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
@@ -215,7 +228,7 @@ private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, 
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(h.date.take(10), fontSize = 12.sp)
+                                Text(fmtDate(h.date), fontSize = 12.sp)
                                 Text(h.label)
                             }
                             Text(
@@ -231,7 +244,27 @@ private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, 
             }
         },
         // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়
-        confirmButton = {},
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = {
+                    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+                        ctx.toast("এই ফোনে গ্যালারিতে সেভ চলে না, শেয়ার ব্যবহার করুন")
+                    } else if (ensureSaved() != null) {
+                        ctx.toast("গ্যালারিতে সেভ হয়েছে")
+                    } else {
+                        ctx.toast("সেভ করা গেল না")
+                    }
+                }) { Text("গ্যালারিতে সেভ") }
+                TextButton(onClick = {
+                    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+                        shareText(ctx, person, kindLabel, items)
+                    } else {
+                        val uri = ensureSaved()
+                        if (uri != null) shareImage(ctx, uri) else ctx.toast("শেয়ার করা গেল না")
+                    }
+                }) { Text("শেয়ার") }
+            }
+        },
     )
 }
 

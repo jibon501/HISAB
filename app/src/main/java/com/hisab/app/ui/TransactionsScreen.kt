@@ -22,7 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +39,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.PaddingValues
+import com.hisab.app.data.fmtDate
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -96,21 +99,30 @@ fun TransactionsScreen(vm: HisabViewModel) {
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAdd = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("নতুন লেনদেন") },
-            )
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Default.Add, contentDescription = "নতুন লেনদেন")
+            }
         },
     ) { pad ->
-        if (vm.txns.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                Text("কোনো লেনদেন নেই")
+        Box(Modifier.fillMaxSize().padding(pad)) {
+            if (vm.txns.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("কোনো লেনদেন নেই")
+                }
+            } else {
+                // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি (+) বাটন ও মোটের নিচে ঢাকা না পড়ে
+                LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                    items(vm.txns, key = { it.id }) { t -> TxnRow(t) { toDelete = t } }
+                }
             }
-        } else {
-            LazyColumn(Modifier.padding(pad)) {
-                items(vm.txns, key = { it.id }) { t -> TxnRow(t) { toDelete = t } }
-            }
+            // স্ক্রিনে যা দেখা যাচ্ছে তার নিট মোট (জমা − খরচ): নিচে বামে, ছোট ও ধূসর
+            val net = vm.txns.sumOf { if (it.type == "credit") it.amount else -it.amount }
+            Text(
+                "মোট: ${tk(net)}",
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp),
+                fontSize = 12.sp,
+                color = Color.Gray,
+            )
         }
     }
 
@@ -176,7 +188,7 @@ private fun TxnRow(t: Txn, onDelete: () -> Unit) {
         headlineContent = { Text(t.category) },
         supportingContent = {
             val note = if (t.note.isNotBlank()) " • ${t.note}" else ""
-            Text("${t.account} • ${t.date.take(10)}$note")
+            Text("${t.account} • ${fmtDate(t.date)}$note")
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -60,7 +60,12 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
             }
         },
     ) { pad ->
-        HorizontalPager(state = pager, modifier = Modifier.padding(pad)) { page ->
+        // সব পেজ সবসময় আঁকা থাকে, তাই ট্যাব বদলালে ড্যাশবোর্ড নতুন করে আঁকা হয়ে লাফায় না
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.padding(pad),
+            beyondViewportPageCount = TABS.size,
+        ) { page ->
             Box {
                 when (page) {
                     0 -> DashboardScreen(vm)
