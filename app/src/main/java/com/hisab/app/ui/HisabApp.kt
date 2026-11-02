@@ -9,7 +9,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hisab.app.HisabViewModel
+import com.hisab.app.data.Kind
 import kotlinx.coroutines.launch
 
 private data class NavTab(val label: String, val icon: ImageVector)
@@ -28,7 +30,8 @@ private data class NavTab(val label: String, val icon: ImageVector)
 private val TABS = listOf(
     NavTab("ড্যাশবোর্ড", Icons.Default.Dashboard),
     NavTab("লেনদেন", Icons.Default.Receipt),
-    NavTab("দেনা-পাওনা", Icons.Default.SwapHoriz),
+    NavTab("ধার দেওয়া", Icons.Default.TrendingUp),
+    NavTab("ধার নেওয়া", Icons.Default.TrendingDown),
     NavTab("অ্যাকাউন্ট", Icons.Default.AccountBalanceWallet),
 )
 
@@ -62,7 +65,8 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
                 when (page) {
                     0 -> DashboardScreen(vm)
                     1 -> TransactionsScreen(vm)
-                    2 -> DebtsScreen(vm)
+                    2 -> DebtsScreen(vm, Kind.LENT)
+                    3 -> DebtsScreen(vm, Kind.LOAN)
                     else -> AccountsScreen(vm)
                 }
             }

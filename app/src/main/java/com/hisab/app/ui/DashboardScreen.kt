@@ -65,7 +65,7 @@ private data class DRow(
 fun DashboardScreen(vm: HisabViewModel) {
     val s = vm.summary
     var detail by remember { mutableStateOf<Detail?>(null) }
-    var editing by remember { mutableStateOf<Pair<String, String>?>(null) } // (ধরন, নাম)
+    var history by remember { mutableStateOf<Pair<String, String>?>(null) } // (ধরন, নাম)
     var paying by remember { mutableStateOf<Long?>(null) } // বাকি খরচের debt id
 
     LazyColumn(
@@ -85,14 +85,14 @@ fun DashboardScreen(vm: HisabViewModel) {
             rows = rowsFor(d, vm),
             // মাসের খরচ কার্ডে ট্যাপ করলে বাকির অংশ আলাদা দেখায়
             baki = if (d == Detail.EXPENSE) s.monthBaki else null,
-            onEdit = { kind, person -> editing = kind to person },
+            onEdit = { kind, person -> history = kind to person },
             onPay = { id -> paying = id },
             onDismiss = { detail = null },
         )
     }
 
-    editing?.let { (kind, person) ->
-        EditDebtDialog(vm, kind, person) { editing = null }
+    history?.let { (kind, person) ->
+        DebtHistoryDialog(vm, kind, person) { history = null }
     }
 
     paying?.let { id ->
@@ -197,39 +197,42 @@ private fun DetailDialog(
     )
 }
 
-/** দেনা-পাওনার নামে ট্যাপ করলে: নাম বদল এবং (একটি মাত্র হিসাব থাকলে) বাকির পরিমাণ বদল */
+/** একজনের ধার-হিসাব: কবে কত ধার নেওয়া/দেওয়া, কবে কত ফেরত (শুধু দেখার জন্য, এডিট নেই) */
 @Composable
-private fun EditDebtDialog(vm: HisabViewModel, kind: String, person: String, onDone: () -> Unit) {
-    val ctx = LocalContext.current
-    val mine = vm.debts[kind].orEmpty().filter { it.person == person && it.remaining > 0 }
-    val single = mine.singleOrNull()
-    var name by remember(kind, person) { mutableStateOf(person) }
-    var remaining by remember(kind, person) {
-        mutableStateOf(single?.remaining?.let { r -> if (r % 1.0 == 0.0) r.toLong().toString() else r.toString() } ?: "")
-    }
-
-    FormDialog(
-        title = "সম্পাদনা",
-        confirmText = "সংরক্ষণ",
-        onDismiss = onDone,
-        onConfirm = {
-            val n = name.trim()
-            val r = remaining.toDoubleOrNull()
-            when {
-                n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
-                single != null && (r == null || r <= 0) -> ctx.toast("সঠিক পরিমাণ দিন")
-                else -> {
-                    vm.editDebt(kind, person, n, single?.id, if (single != null) r else null)
-                    onDone()
+private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, onDismiss: () -> Unit) {
+    val items = remember(kind, person, vm.debts) { vm.debtHistory(kind, person) }
+    val remaining = items.sumOf { if (it.payment) -it.amount else it.amount }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        text = {
+            Column {
+                Text(person, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                LazyColumn(Modifier.heightIn(max = 340.dp)) {
+                    items(items) { h ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(h.date.take(10), fontSize = 12.sp)
+                                Text(h.label)
+                            }
+                            Text(
+                                tk(h.amount),
+                                fontWeight = FontWeight.Bold,
+                                color = if (h.payment) Color(0xFF2E7D32) else Color.Unspecified,
+                            )
+                        }
+                    }
                 }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text("বাকি: ${tk(remaining)}", fontWeight = FontWeight.Bold)
             }
         },
-    ) {
-        TextInput(name, { name = it }, "নাম")
-        if (single != null) {
-            MoneyField(remaining, { remaining = it }, "বাকির পরিমাণ")
-        }
-    }
+        // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়
+        confirmButton = {},
+    )
 }
 
 /** বাকি খরচ পরিশোধ: অ্যাকাউন্ট বেছে টাকা দিলে সেই অ্যাকাউন্ট থেকে কাটবে, বাকি কমবে */
@@ -268,7 +271,7 @@ private fun PayBakiDialog(vm: HisabViewModel, debtId: Long, onDone: () -> Unit) 
         MoneyField(amount, { amount = it }, "কত টাকা দিচ্ছেন")
         Picker(
             label = "কোন অ্যাকাউন্ট থেকে কাটবে",
-            options = vm.accounts,
+            options = vm.accounts.withMoney(),
             selected = acc,
             text = { "${it.name} (${tk(it.balance)})" },
         ) { acc = it }

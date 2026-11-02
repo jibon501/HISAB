@@ -42,6 +42,9 @@ val TYPE_LABELS = linkedMapOf(
     "other" to "অন্যান্য",
 )
 
+/** টাকা বেরিয়ে যাওয়ার কাজে শুধু যে অ্যাকাউন্টে টাকা আছে (ব্যালেন্স ০ বা কম হলে বাদ) */
+fun List<com.hisab.app.data.Account>.withMoney() = filter { it.balance > 0.0 }
+
 /** নিজে যোগ করা ধরনের নামই ধরনের মান; বাকি ধরনের জন্য উপরের তালিকার নাম */
 fun typeLabel(type: String): String = TYPE_LABELS[type] ?: type
 

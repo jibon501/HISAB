@@ -48,62 +48,23 @@ import com.hisab.app.data.Account
 import com.hisab.app.data.Debt
 import com.hisab.app.data.Kind
 
-private val KINDS = listOf(
-    Kind.LOAN to "ধার নেওয়া",
-    Kind.LENT to "ধার দেওয়া",
-
-)
-
-/** নিচের বারের একটি বাটন: বাছাই করা থাকলে গাঢ় */
+/** ধার দেওয়া / ধার নেওয়া: প্রতিটির আলাদা স্ক্রিন, ডানে ভাসমান (+) বাটন */
 @Composable
-private fun KindButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    if (selected) {
-        FilledTonalButton(onClick = onClick, modifier = modifier) {
-            Text(label, fontWeight = FontWeight.Bold)
-        }
-    } else {
-        TextButton(onClick = onClick, modifier = modifier) { Text(label) }
-    }
-}
-
-/** ধার নেওয়া / ধার দেওয়া: দুটি ট্যাবে */
-@Composable
-fun DebtsScreen(vm: HisabViewModel) {
-    var index by rememberSaveable { mutableStateOf(0) }
+fun DebtsScreen(vm: HisabViewModel, kind: String) {
     var showAdd by remember { mutableStateOf(false) }
     var payTarget by remember { mutableStateOf<Debt?>(null) }
-    val kind = KINDS[index].first
     val list = vm.debts[kind].orEmpty()
 
     Scaffold(
         // উপরের অংশের জায়গা বাইরের কাঠামোই ধরে, তাই এখানে আলাদা ইনসেট নেই
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // নিচে: ধার নেওয়া | (+) | ধার দেওয়া
-        bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    KindButton(KINDS[0].second, index == 0, Modifier.weight(1f)) { index = 0 }
-                    FloatingActionButton(onClick = { showAdd = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "নতুন")
-                    }
-                    KindButton(KINDS[1].second, index == 1, Modifier.weight(1f)) { index = 1 }
-                }
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Default.Add, contentDescription = "নতুন")
             }
         },
     ) { pad ->
         Column(Modifier.padding(pad)) {
-            Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "মোট বাকি: ${tk(list.sumOf { it.remaining })}",
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
             if (list.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("কোনো হিসাব নেই") }
             } else {
@@ -131,7 +92,8 @@ fun DebtsScreen(vm: HisabViewModel) {
     if (showAdd) {
         AddDebtDialog(
             kind = kind,
-            accounts = vm.accounts,
+            // ধার দিলে টাকা বেরিয়ে যায়, তাই তখন ০ ব্যালেন্সের অ্যাকাউন্ট বাদ
+            accounts = if (kind == Kind.LENT) vm.accounts.withMoney() else vm.accounts,
             // আগে সেভ করা সব নাম (সাম্প্রতিক আগে), লিখতে শুরু করলে সাজেশন হিসেবে দেখাবে
             suggestions = vm.debts.values.flatten().sortedByDescending { it.id }.map { it.person }.distinct(),
             onDismiss = { showAdd = false },
@@ -144,7 +106,8 @@ fun DebtsScreen(vm: HisabViewModel) {
     payTarget?.let { d ->
         PayDialog(
             debt = d,
-            accounts = vm.accounts,
+            // ধার পরিশোধে টাকা বেরিয়ে যায়, ধার ফেরত পেলে টাকা ঢোকে
+            accounts = if (d.kind == Kind.LOAN) vm.accounts.withMoney() else vm.accounts,
             onDismiss = { payTarget = null },
             onSave = { amount, accId ->
                 vm.pay(d, amount, accId)

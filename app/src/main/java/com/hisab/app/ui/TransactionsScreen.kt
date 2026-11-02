@@ -84,7 +84,7 @@ fun TransactionsScreen(vm: HisabViewModel) {
                                 text = { Text("সব খাত") },
                                 onClick = { vm.applyFilter(null); menu = false },
                             )
-                            (vm.categories.map { it.name }.distinct() + SYSTEM_CATS).forEach { c ->
+                            vm.usedCategories.forEach { c ->
                                 DropdownMenuItem(
                                     text = { Text(c) },
                                     onClick = { vm.applyFilter(c); menu = false },
@@ -228,12 +228,12 @@ private fun AddTxnDialog(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = type == "debit",
-                onClick = { type = "debit"; cat = "" },
+                onClick = { type = "debit"; cat = ""; acc = null },
                 label = { Text("খরচ") },
             )
             FilterChip(
                 selected = type == "credit",
-                onClick = { type = "credit"; cat = "" },
+                onClick = { type = "credit"; cat = ""; acc = null },
                 label = { Text("আয়") },
             )
         }
@@ -252,7 +252,8 @@ private fun AddTxnDialog(
         if (!(type == "debit" && baki)) {
             Picker(
                 label = if (type == "debit") "কোন অ্যাকাউন্ট থেকে কাটবে" else "কোন অ্যাকাউন্টে জমা হবে",
-                options = accounts,
+                // খরচের সময় ০ ব্যালেন্সের অ্যাকাউন্ট দেখানো হয় না
+                options = if (type == "debit") accounts.withMoney() else accounts,
                 selected = acc,
                 text = { "${it.name} (${tk(it.balance)})" },
             ) { acc = it }
@@ -288,7 +289,7 @@ private fun TransferDialog(
         },
     ) {
         val label: (Account) -> String = { "${it.name} (${tk(it.balance)})" }
-        Picker("যে অ্যাকাউন্ট থেকে", accounts, from, label) { from = it }
+        Picker("যে অ্যাকাউন্ট থেকে", accounts.withMoney(), from, label) { from = it }
         Picker("যে অ্যাকাউন্টে", accounts, to, label) { to = it }
         MoneyField(amount) { amount = it }
     }
