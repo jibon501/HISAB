@@ -41,6 +41,13 @@ data class Debt(
 /** খাত (kind: expense = খরচ, income = আয়) */
 data class Category(val id: Long, val name: String, val kind: String)
 
+/** তারিখ দিন-মাস-বছর, বাংলা সংখ্যায়: "2026-11-02T..." → "০২-১১-২০২৬" */
+fun fmtDate(iso: String): String {
+    val p = iso.take(10).split("-")
+    val text = if (p.size == 3) "${p[2]}-${p[1]}-${p[0]}" else iso.take(10)
+    return text.map { if (it in '0'..'9') '\u09E6' + (it - '0') else it }.joinToString("")
+}
+
 /** একজনের ধার-হিসাবের একটি এন্ট্রি (payment = true হলে ফেরত/পরিশোধ) */
 data class HistoryItem(val date: String, val label: String, val amount: Double, val payment: Boolean)
 
@@ -337,7 +344,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             arrayOf(start),
         ).use { c ->
             while (c.moveToNext()) {
-                items += c.getString(2) to MonthItem("${c.getString(0)} • ${c.getString(2).take(10)}", c.getDouble(1), 0.0)
+                items += c.getString(2) to MonthItem("${c.getString(0)} • ${fmtDate(c.getString(2))}", c.getDouble(1), 0.0)
             }
         }
         db.rawQuery(
@@ -350,7 +357,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             arrayOf(start),
         ).use { c ->
             while (c.moveToNext()) {
-                items += c.getString(3) to MonthItem("${c.getString(0)} • ${c.getString(3).take(10)}", c.getDouble(1), c.getDouble(2), c.getLong(4))
+                items += c.getString(3) to MonthItem("${c.getString(0)} • ${fmtDate(c.getString(3))}", c.getDouble(1), c.getDouble(2), c.getLong(4))
             }
         }
         return items.sortedByDescending { it.first }.map { it.second }
