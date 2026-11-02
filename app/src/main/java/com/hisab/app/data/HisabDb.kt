@@ -41,6 +41,9 @@ data class Debt(
 /** খাত (kind: expense = খরচ, income = আয়) */
 data class Category(val id: Long, val name: String, val kind: String)
 
+/** একজনের ধার-হিসাবের একটি এন্ট্রি (payment = true হলে ফেরত/পরিশোধ) */
+data class HistoryItem(val date: String, val label: String, val amount: Double, val payment: Boolean)
+
 /** চলতি মাসের খরচের একটি সারি। remaining > 0 হলে সেটা বাকি */
 data class MonthItem(val title: String, val amount: Double, val remaining: Double, val debtId: Long = 0L)
 
@@ -268,6 +271,35 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             """.trimIndent(),
             args,
         ).use { c -> c.toTxns() }
+    }
+
+    /** লেনদেনে যেসব খাত সত্যিই আছে (ফিল্টার মেনুর জন্য) */
+    fun usedCategories(): List<String> =
+        readableDatabase.rawQuery("SELECT DISTINCT category FROM txns ORDER BY category", null).use { c ->
+            buildList { while (c.moveToNext()) add(c.getString(0)) }
+        }
+
+    /** এক ব্যক্তির ধার নেওয়া/দেওয়া ও ফেরতের সব এন্ট্রি, তারিখ অনুযায়ী পুরনো আগে */
+    fun debtHistory(kind: String, person: String): List<HistoryItem> {
+        val db = readableDatabase
+        val out = mutableListOf<HistoryItem>()
+        val firstLabel = if (kind == Kind.LENT) "ধার দেওয়া" else "ধার নেওয়া"
+        db.rawQuery(
+            "SELECT date, total FROM debts WHERE kind = ? AND person = ?",
+            arrayOf(kind, person),
+        ).use { c ->
+            while (c.moveToNext()) out += HistoryItem(c.getString(0), firstLabel, c.getDouble(1), false)
+        }
+        db.rawQuery(
+            """
+            SELECT t.date, t.amount FROM txns t JOIN debts d ON d.id = t.debt_id
+            WHERE d.kind = ? AND d.person = ? AND t.is_payment = 1
+            """.trimIndent(),
+            arrayOf(kind, person),
+        ).use { c ->
+            while (c.moveToNext()) out += HistoryItem(c.getString(0), "ফেরত", c.getDouble(1), true)
+        }
+        return out.sortedBy { it.date }
     }
 
     /** ট্রান্সফারের দুই দিকই একসাথে মুছে যায় (ref একই) */
