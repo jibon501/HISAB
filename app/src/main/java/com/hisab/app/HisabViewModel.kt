@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hisab.app.data.Account
 import com.hisab.app.data.Category
+import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.MonthItem
 import com.hisab.app.data.Debt
 import com.hisab.app.data.HisabDb
@@ -45,6 +46,8 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var categories by mutableStateOf(emptyList<Category>())
         private set
+    var usedCategories by mutableStateOf(emptyList<String>())
+        private set
     var debts by mutableStateOf(emptyMap<String, List<Debt>>())
         private set
     var summary by mutableStateOf(Summary())
@@ -57,6 +60,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         val txns: List<Txn>,
         val monthExpenses: List<MonthItem>,
         val categories: List<Category>,
+        val usedCategories: List<String>,
         val debts: Map<String, List<Debt>>,
         val summary: Summary,
     )
@@ -76,6 +80,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
             txns = db.txns(filter),
             monthExpenses = month,
             categories = db.categories(),
+            usedCategories = db.usedCategories(),
             debts = debtMap,
             summary = Summary(
                 cash = sum("cash", "mobile", "bank"),
@@ -95,6 +100,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         txns = s.txns
         monthExpenses = s.monthExpenses
         categories = s.categories
+        usedCategories = s.usedCategories
         debts = s.debts
         summary = s.summary
     }
@@ -119,6 +125,9 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
 
     fun addTxn(type: String, amount: Double, accountId: Long, category: String, note: String) =
         exec { db.addTxn(type, amount, accountId, category, note) }
+
+    /** একজনের ধার-হিসাবের তালিকা (শুধু দেখার জন্য) */
+    fun debtHistory(kind: String, person: String): List<HistoryItem> = db.debtHistory(kind, person)
 
     fun addBakiExpense(amount: Double, category: String, note: String) =
         exec { db.addBakiExpense(amount, category, note) }
