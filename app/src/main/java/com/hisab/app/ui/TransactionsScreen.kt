@@ -63,7 +63,7 @@ fun TransactionsScreen(vm: HisabViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(vm.filter?.let { "লেনদেন • $it" } ?: "লেনদেন") },
+                title = { Text(vm.filter ?: "") },
                 actions = {
                     IconButton(onClick = { showCats = true }) {
                         Icon(Icons.Default.Category, contentDescription = "খাত")
@@ -257,7 +257,7 @@ private fun AddTxnDialog(
                 text = { "${it.name} (${tk(it.balance)})" },
             ) { acc = it }
         }
-        TextInput(note, { note = it }, "নোট (ঐচ্ছিক)")
+        TextInput(note, { note = it }, "নোট")
     }
 }
 

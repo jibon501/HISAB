@@ -74,7 +74,7 @@ fun DashboardScreen(vm: HisabViewModel) {
     ) {
         item { SummaryCard("ক্যাশ", s.cash, Color(0xFF00897B), Icons.Default.Payments, big = true) { detail = Detail.CASH } }
         item { SummaryCard("মোট পাওনা", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
-        item { SummaryCard("মোট লোন", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
+        item { SummaryCard("ধার নেওয়া", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
         item { SummaryCard("এই মাসের খরচ", s.monthExpense, Color(0xFF8E24AA), Icons.Default.ShoppingCart) { detail = Detail.EXPENSE } }
         item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
         item { SummaryCard("সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
@@ -118,7 +118,9 @@ private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
         Detail.LOAN -> owed(Kind.LOAN)
         Detail.LENT -> owed(Kind.LENT)
         Detail.DPS -> accounts("dps")
-        Detail.ASSET -> accounts("asset", "other")
+        Detail.ASSET -> vm.accounts
+            .filter { it.type !in ASSET_EXCLUDED_TYPES && it.balance != 0.0 }
+            .map { DRow(it.name, it.balance) }
         Detail.EXPENSE -> vm.monthExpenses.map {
             DRow(
                 it.title, it.amount,
@@ -156,9 +158,7 @@ private fun DetailDialog(
                     )
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                if (rows.isEmpty()) {
-                    Text("কোনো তথ্য নেই")
-                } else {
+                if (rows.isNotEmpty()) {
                     LazyColumn(Modifier.heightIn(max = 360.dp)) {
                         items(rows) { row ->
                             val tap = row.kind

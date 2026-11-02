@@ -32,14 +32,21 @@ import java.util.Locale
 // ---------- ধ্রুবক ----------
 val SYSTEM_CATS = listOf("ট্রান্সফার", "লোন গ্রহণ", "ধার প্রদান", "লোন পরিশোধ", "ধার ফেরত", "দোকান বাকি পরিশোধ")
 
+/** অ্যাকাউন্টের ধরন (তালিকার ক্রম: উপর থেকে নিচে)। "other" শুধু আগের অ্যাকাউন্টের জন্য, নতুন করে বেছে নেওয়া যায় না */
 val TYPE_LABELS = linkedMapOf(
-    "cash" to "নগদ",
-    "mobile" to "মোবাইল",
-    "bank" to "ব্যাংক",
-    "dps" to "ডিপিএস",
     "asset" to "সম্পদ",
+    "dps" to "ডিপিএস",
+    "bank" to "ব্যাংক",
+    "mobile" to "মোবাইল",
+    "cash" to "নগদ",
     "other" to "অন্যান্য",
 )
+
+/** নিজে যোগ করা ধরনের নামই ধরনের মান; বাকি ধরনের জন্য উপরের তালিকার নাম */
+fun typeLabel(type: String): String = TYPE_LABELS[type] ?: type
+
+/** ড্যাশবোর্ডে ক্যাশ ও ডিপিএস কার্ডের বাইরের সব ধরন "সম্পদ" কার্ডে যায় */
+val ASSET_EXCLUDED_TYPES = setOf("cash", "mobile", "bank", "dps")
 
 private val BN: Locale = Locale.forLanguageTag("bn-BD")
 

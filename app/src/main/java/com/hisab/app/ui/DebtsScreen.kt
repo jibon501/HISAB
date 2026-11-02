@@ -18,7 +18,10 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -46,12 +49,24 @@ import com.hisab.app.data.Debt
 import com.hisab.app.data.Kind
 
 private val KINDS = listOf(
-    Kind.LOAN to "লোন নেওয়া",
+    Kind.LOAN to "ধার নেওয়া",
     Kind.LENT to "ধার দেওয়া",
 
 )
 
-/** লোন / ধার: দুটি ট্যাবে */
+/** নিচের বারের একটি বাটন: বাছাই করা থাকলে গাঢ় */
+@Composable
+private fun KindButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    if (selected) {
+        FilledTonalButton(onClick = onClick, modifier = modifier) {
+            Text(label, fontWeight = FontWeight.Bold)
+        }
+    } else {
+        TextButton(onClick = onClick, modifier = modifier) { Text(label) }
+    }
+}
+
+/** ধার নেওয়া / ধার দেওয়া: দুটি ট্যাবে */
 @Composable
 fun DebtsScreen(vm: HisabViewModel) {
     var index by rememberSaveable { mutableStateOf(0) }
@@ -61,19 +76,22 @@ fun DebtsScreen(vm: HisabViewModel) {
     val list = vm.debts[kind].orEmpty()
 
     Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(title = { Text("দেনা-পাওনা") })
-                TabRow(selectedTabIndex = index) {
-                    KINDS.forEachIndexed { i, (_, label) ->
-                        Tab(selected = index == i, onClick = { index = i }, text = { Text(label) })
+        // উপরের অংশের জায়গা বাইরের কাঠামোই ধরে, তাই এখানে আলাদা ইনসেট নেই
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        // নিচে: ধার নেওয়া | (+) | ধার দেওয়া
+        bottomBar = {
+            Surface(tonalElevation = 3.dp) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    KindButton(KINDS[0].second, index == 0, Modifier.weight(1f)) { index = 0 }
+                    FloatingActionButton(onClick = { showAdd = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "নতুন")
                     }
+                    KindButton(KINDS[1].second, index == 1, Modifier.weight(1f)) { index = 1 }
                 }
-            }
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "নতুন")
             }
         },
     ) { pad ->
@@ -208,7 +226,7 @@ private fun AddDebtDialog(
                 text = { "${it.name} (${tk(it.balance)})" },
             ) { acc = it }
         }
-        TextInput(note, { note = it }, "নোট (ঐচ্ছিক)")
+        TextInput(note, { note = it }, "নোট")
     }
 }
 

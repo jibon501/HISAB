@@ -9,6 +9,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -18,10 +24,16 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun CategoryField(options: List<String>, value: String, onChange: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    var focused by remember { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
+    Column(
+        modifier = Modifier.onFocusChanged { focused = it.hasFocus },
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         TextInput(value, onChange, "খাত")
         val q = value.trim()
-        val shown = options
+        // ঘরে ক্লিক করলে সাজেশন দেখায়, ঘর থেকে সরে গেলে লুকায়
+        val shown = if (!focused) emptyList() else options
             .filter { q.isEmpty() || it.contains(q, ignoreCase = true) }
             .filter { !it.equals(q, ignoreCase = true) }
             .sortedByDescending { it.startsWith(q, ignoreCase = true) }
@@ -38,7 +50,10 @@ fun CategoryField(options: List<String>, value: String, onChange: (String) -> Un
                             n,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onChange(n) }
+                                .clickable {
+                                    onChange(n)
+                                    focus.clearFocus()
+                                }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                         )
                     }
