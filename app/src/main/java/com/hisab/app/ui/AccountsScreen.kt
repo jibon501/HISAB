@@ -140,10 +140,10 @@ private fun AddAccountDialog(
             else onSave(name.trim(), type, opening.toDoubleOrNull() ?: 0.0, defaultIconKey(type))
         },
     ) {
-        TextInput(name, { name = it }, "অ্যাকাউন্টের নাম")
         Picker("ধরন", TYPE_LABELS.keys.toList(), type, { TYPE_LABELS.getValue(it) }) {
             type = it
         }
+        BankNameField(type, name) { name = it }
         MoneyField(opening, { opening = it }, "শুরুর ব্যালেন্স")
     }
 }
@@ -164,7 +164,7 @@ private fun EditAccountDialog(
         title = { Text("অ্যাকাউন্ট এডিট") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextInput(name, { name = it }, "অ্যাকাউন্টের নাম")
+                BankNameField(account.type, name) { name = it }
                 TextButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
