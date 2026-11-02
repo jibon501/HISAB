@@ -119,9 +119,10 @@ fun TransactionsScreen(vm: HisabViewModel) {
             accounts = vm.accounts,
             expenseCats = vm.categories.filter { it.kind == "expense" }.map { it.name },
             incomeCats = vm.categories.filter { it.kind == "income" }.map { it.name },
-            onManageCats = { showCats = true },
             onDismiss = { showAdd = false },
             onSave = { type, amount, accId, cat, note, baki ->
+                // তালিকায় না থাকা নতুন খাত লিখলে নিজে থেকে সেভ হয়ে যায়
+                vm.addCategory(cat, if (type == "debit") "expense" else "income")
                 if (baki) vm.addBakiExpense(amount, cat, note)
                 else if (accId != null) vm.addTxn(type, amount, accId, cat, note)
                 showAdd = false
@@ -197,14 +198,13 @@ private fun AddTxnDialog(
     accounts: List<Account>,
     expenseCats: List<String>,
     incomeCats: List<String>,
-    onManageCats: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (type: String, amount: Double, accountId: Long?, category: String, note: String, baki: Boolean) -> Unit,
 ) {
     val ctx = LocalContext.current
     var type by remember { mutableStateOf("debit") }
     var amount by remember { mutableStateOf("") }
-    var cat by remember { mutableStateOf<String?>(null) }
+    var cat by remember { mutableStateOf("") }
     var acc by remember { mutableStateOf<Account?>(null) }
     var note by remember { mutableStateOf("") }
     var baki by remember { mutableStateOf(false) }
@@ -215,11 +215,11 @@ private fun AddTxnDialog(
         onDismiss = onDismiss,
         onConfirm = {
             val a = amount.toDoubleOrNull()
-            val c = cat
+            val c = cat.trim()
             val ac = acc
             val isBaki = type == "debit" && baki
-            if (a == null || a <= 0 || c == null || (!isBaki && ac == null)) {
-                ctx.toast(if (isBaki) "পরিমাণ ও খাত সিলেক্ট করুন" else "পরিমাণ, খাত ও অ্যাকাউন্ট সিলেক্ট করুন")
+            if (a == null || a <= 0 || c.isEmpty() || (!isBaki && ac == null)) {
+                ctx.toast(if (isBaki) "পরিমাণ ও খাত দিন" else "পরিমাণ, খাত ও অ্যাকাউন্ট দিন")
             } else {
                 onSave(type, a, ac?.id, c, note.trim(), isBaki)
             }
@@ -228,18 +228,17 @@ private fun AddTxnDialog(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = type == "debit",
-                onClick = { type = "debit"; cat = null },
-                label = { Text("খরচ (ডেবিট)") },
+                onClick = { type = "debit"; cat = "" },
+                label = { Text("খরচ") },
             )
             FilterChip(
                 selected = type == "credit",
-                onClick = { type = "credit"; cat = null },
-                label = { Text("আয় (ক্রেডিট)") },
+                onClick = { type = "credit"; cat = "" },
+                label = { Text("আয়") },
             )
         }
         MoneyField(amount) { amount = it }
-        Picker("খাত", if (type == "debit") expenseCats else incomeCats, cat, { it }) { cat = it }
-        TextButton(onClick = onManageCats) { Text("খাত এডিট / মুছা / যোগ করা") }
+        CategoryField(if (type == "debit") expenseCats else incomeCats, cat) { cat = it }
         if (type == "debit") {
             Row(
                 Modifier.fillMaxWidth(),

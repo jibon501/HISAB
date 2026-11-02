@@ -48,10 +48,10 @@ import com.hisab.app.data.Kind
 private val KINDS = listOf(
     Kind.LOAN to "লোন নেওয়া",
     Kind.LENT to "ধার দেওয়া",
-    Kind.SHOP to "দোকান বাকি",
+
 )
 
-/** লোন / ধার / দোকান বাকি: তিনটি ট্যাবে */
+/** লোন / ধার: দুটি ট্যাবে */
 @Composable
 fun DebtsScreen(vm: HisabViewModel) {
     var index by rememberSaveable { mutableStateOf(0) }

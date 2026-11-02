@@ -48,16 +48,23 @@ fun CategoriesDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("খাত") },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 listOf("expense" to "খরচের খাত", "income" to "আয়ের খাত").forEach { (kind, label) ->
-                    Text(
-                        label,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                    )
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            label,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        IconButton(onClick = { input = NameInput(null, kind, "") }) {
+                            Icon(Icons.Default.Add, contentDescription = "নতুন খাত")
+                        }
+                    }
                     categories.filter { it.kind == kind }.forEach { c ->
                         Row(
                             Modifier.fillMaxWidth(),
@@ -72,10 +79,6 @@ fun CategoriesDialog(
                                 Icon(Icons.Default.Delete, contentDescription = "মুছুন", tint = MaterialTheme.colorScheme.error)
                             }
                         }
-                    }
-                    TextButton(onClick = { input = NameInput(null, kind, "") }) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Text(if (kind == "expense") "নতুন খরচের খাত" else "নতুন আয়ের খাত")
                     }
                 }
             }

@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,7 +48,7 @@ import com.hisab.app.data.Kind
 
 /** কোন কার্ডে ট্যাপ করা হয়েছে */
 private enum class Detail {
-    CASH, LENT, LOAN, SHOP, EXPENSE, DPS, ASSET
+    CASH, LENT, LOAN, EXPENSE, DPS, ASSET
 }
 
 /** তালিকার একটি সারি। kind থাকলে (দেনা-পাওনা) নামে ট্যাপ করে এডিট করা যায় */
@@ -56,6 +57,7 @@ private data class DRow(
     val value: Double,
     val sub: String? = null,
     val kind: String? = null,
+    val payDebtId: Long? = null, // বাকি খরচ: ট্যাপ করলে পরিশোধ
 )
 
 /** হোম স্ক্রিন: সারসংক্ষেপ কার্ড। কার্ডে ট্যাপ করলে বিস্তারিত তালিকা */
@@ -64,6 +66,7 @@ fun DashboardScreen(vm: HisabViewModel) {
     val s = vm.summary
     var detail by remember { mutableStateOf<Detail?>(null) }
     var editing by remember { mutableStateOf<Pair<String, String>?>(null) } // (ধরন, নাম)
+    var paying by remember { mutableStateOf<Long?>(null) } // বাকি খরচের debt id
 
     LazyColumn(
         contentPadding = PaddingValues(12.dp),
@@ -72,7 +75,6 @@ fun DashboardScreen(vm: HisabViewModel) {
         item { SummaryCard("ক্যাশ", s.cash, Color(0xFF00897B), Icons.Default.Payments, big = true) { detail = Detail.CASH } }
         item { SummaryCard("মোট পাওনা", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
         item { SummaryCard("মোট লোন", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
-        item { SummaryCard("দোকান বাকি", s.shop, Color(0xFFFB8C00), Icons.Default.Store) { detail = Detail.SHOP } }
         item { SummaryCard("এই মাসের খরচ", s.monthExpense, Color(0xFF8E24AA), Icons.Default.ShoppingCart) { detail = Detail.EXPENSE } }
         item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
         item { SummaryCard("সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
@@ -84,6 +86,7 @@ fun DashboardScreen(vm: HisabViewModel) {
             // মাসের খরচ কার্ডে ট্যাপ করলে বাকির অংশ আলাদা দেখায়
             baki = if (d == Detail.EXPENSE) s.monthBaki else null,
             onEdit = { kind, person -> editing = kind to person },
+            onPay = { id -> paying = id },
             onDismiss = { detail = null },
         )
     }
@@ -91,12 +94,17 @@ fun DashboardScreen(vm: HisabViewModel) {
     editing?.let { (kind, person) ->
         EditDebtDialog(vm, kind, person) { editing = null }
     }
+
+    paying?.let { id ->
+        PayBakiDialog(vm, id) { paying = null }
+    }
 }
 
 /** কার্ড অনুযায়ী তালিকার সারি */
 private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
     fun accounts(vararg types: String) =
-        vm.accounts.filter { it.type in types }.map { DRow(it.name, it.balance) }
+        // ব্যালেন্স ০ হলে দেখানো হয় না
+        vm.accounts.filter { it.type in types && it.balance != 0.0 }.map { DRow(it.name, it.balance) }
 
     // একই নামের একাধিক হিসাব যোগ করে মোট দেখায়
     fun owed(kind: String) = vm.debts[kind].orEmpty()
@@ -109,11 +117,14 @@ private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
         Detail.CASH -> accounts("cash", "mobile", "bank")
         Detail.LOAN -> owed(Kind.LOAN)
         Detail.LENT -> owed(Kind.LENT)
-        Detail.SHOP -> owed(Kind.SHOP)
         Detail.DPS -> accounts("dps")
         Detail.ASSET -> accounts("asset", "other")
         Detail.EXPENSE -> vm.monthExpenses.map {
-            DRow(it.title, it.amount, sub = if (it.remaining > 0) "বাকি ${tk(it.remaining)}" else null)
+            DRow(
+                it.title, it.amount,
+                sub = if (it.remaining > 0) "বাকি ${tk(it.remaining)} • চাপলে পরিশোধ" else null,
+                payDebtId = if (it.remaining > 0 && it.debtId > 0) it.debtId else null,
+            )
         }
     }
 }
@@ -124,6 +135,7 @@ private fun DetailDialog(
     rows: List<DRow>,
     baki: Double?,
     onEdit: (kind: String, person: String) -> Unit,
+    onPay: (debtId: Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -150,10 +162,17 @@ private fun DetailDialog(
                     LazyColumn(Modifier.heightIn(max = 360.dp)) {
                         items(rows) { row ->
                             val tap = row.kind
+                            val pay = row.payDebtId
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .then(if (tap != null) Modifier.clickable { onEdit(tap, row.name) } else Modifier)
+                                    .then(
+                                        when {
+                                            tap != null -> Modifier.clickable { onEdit(tap, row.name) }
+                                            pay != null -> Modifier.clickable { onPay(pay) }
+                                            else -> Modifier
+                                        }
+                                    )
                                     .padding(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
@@ -173,7 +192,8 @@ private fun DetailDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("বন্ধ করুন") } },
+        // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়, আলাদা বাটন নেই
+        confirmButton = {},
     )
 }
 
@@ -209,6 +229,49 @@ private fun EditDebtDialog(vm: HisabViewModel, kind: String, person: String, onD
         if (single != null) {
             MoneyField(remaining, { remaining = it }, "বাকির পরিমাণ")
         }
+    }
+}
+
+/** বাকি খরচ পরিশোধ: অ্যাকাউন্ট বেছে টাকা দিলে সেই অ্যাকাউন্ট থেকে কাটবে, বাকি কমবে */
+@Composable
+private fun PayBakiDialog(vm: HisabViewModel, debtId: Long, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val debt = vm.debts[Kind.SHOP].orEmpty().firstOrNull { it.id == debtId }
+    if (debt == null) {
+        LaunchedEffect(Unit) { onDone() }
+        return
+    }
+    var amount by remember(debtId) {
+        mutableStateOf(debt.remaining.let { r -> if (r % 1.0 == 0.0) r.toLong().toString() else r.toString() })
+    }
+    var acc by remember(debtId) { mutableStateOf<com.hisab.app.data.Account?>(null) }
+
+    FormDialog(
+        title = "বাকি পরিশোধ",
+        confirmText = "পরিশোধ",
+        onDismiss = onDone,
+        onConfirm = {
+            val a = amount.toDoubleOrNull()
+            val ac = acc
+            when {
+                a == null || a <= 0 -> ctx.toast("সঠিক পরিমাণ দিন")
+                a > debt.remaining -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
+                ac == null -> ctx.toast("অ্যাকাউন্ট সিলেক্ট করুন")
+                else -> {
+                    vm.pay(debt, a, ac.id)
+                    onDone()
+                }
+            }
+        },
+    ) {
+        Text("${debt.person} • বাকি ${tk(debt.remaining)}")
+        MoneyField(amount, { amount = it }, "কত টাকা দিচ্ছেন")
+        Picker(
+            label = "কোন অ্যাকাউন্ট থেকে কাটবে",
+            options = vm.accounts,
+            selected = acc,
+            text = { "${it.name} (${tk(it.balance)})" },
+        ) { acc = it }
     }
 }
 

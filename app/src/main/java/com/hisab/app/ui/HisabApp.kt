@@ -1,5 +1,6 @@
 package com.hisab.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -36,6 +37,11 @@ private val TABS = listOf(
 fun HisabApp(vm: HisabViewModel = viewModel()) {
     val pager = rememberPagerState(pageCount = { TABS.size })
     val scope = rememberCoroutineScope()
+
+    // ব্যাক চাপলে আগে ড্যাশবোর্ডে ফিরবে, ড্যাশবোর্ডে থাকলে তবেই অ্যাপ বন্ধ হবে
+    BackHandler(enabled = pager.currentPage != 0) {
+        scope.launch { pager.animateScrollToPage(0) }
+    }
 
     Scaffold(
         bottomBar = {
