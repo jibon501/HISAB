@@ -31,9 +31,10 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      # কীস্টোর সেটআপ:
-      # Secrets দেওয়া থাকলে সেটাই ব্যবহার হবে (আপডেটের জন্য এটাই সঠিক পথ)।
-      # না থাকলে অস্থায়ী কীস্টোর বানিয়ে সাইন করা হবে (এই APK-র উপর পরে আপডেট ইনস্টল হবে না)।
+      # কীস্টোর সেটআপ (অটো): সাইনিংয়ের কী নেওয়ার ক্রম:
+      # ১) GitHub Secrets দেওয়া থাকলে সেটা
+      # ২) না থাকলে রিপোর signing/hisab-release.jks (স্থায়ী কী, প্রতিবার একই, আপডেট ইনস্টল হবে)
+      # ৩) কোনোটাই না থাকলে অস্থায়ী কী (এই APK-র উপর আপডেট ইনস্টল হবে না)
       - name: Prepare signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -47,8 +48,14 @@ jobs:
             echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
             echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
             echo "KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          elif [ -f signing/hisab-release.jks ]; then
+            echo "স্থায়ী কীস্টোর (signing/hisab-release.jks) দিয়ে সাইন করা হচ্ছে"
+            cp signing/hisab-release.jks "$KS"
+            echo "KEYSTORE_PASSWORD=hisab-Key-2026" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=hisab" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=hisab-Key-2026" >> "$GITHUB_ENV"
           else
-            echo "::warning::KEYSTORE_BASE64 secret পাওয়া যায়নি। অস্থায়ী কীস্টোর দিয়ে সাইন করা হচ্ছে। README দেখে স্থায়ী কীস্টোর সেট করুন।"
+            echo "::warning::স্থায়ী কীস্টোর পাওয়া যায়নি। অস্থায়ী কীস্টোর দিয়ে সাইন করা হচ্ছে।"
             keytool -genkeypair -v -keystore "$KS" -alias hisab -keyalg RSA -keysize 2048 \
               -validity 10000 -storepass hisabtemp123 -keypass hisabtemp123 \
               -dname "CN=Hisab, OU=Dev, O=Hisab, C=BD"
