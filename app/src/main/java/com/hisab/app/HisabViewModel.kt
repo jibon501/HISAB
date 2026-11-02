@@ -83,7 +83,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
                 lent = owed(Kind.LENT),
                 shop = owed(Kind.SHOP),
                 dps = sum("dps"),
-                asset = sum("asset", "other"),
+                asset = accs.filter { it.type !in setOf("cash", "mobile", "bank", "dps") }.sumOf { it.balance },
                 monthExpense = month.sumOf { it.amount },
                 monthBaki = month.sumOf { it.remaining },
             ),
