@@ -42,7 +42,7 @@ data class Debt(
 data class Category(val id: Long, val name: String, val kind: String)
 
 /** চলতি মাসের খরচের একটি সারি। remaining > 0 হলে সেটা বাকি */
-data class MonthItem(val title: String, val amount: Double, val remaining: Double)
+data class MonthItem(val title: String, val amount: Double, val remaining: Double, val debtId: Long = 0L)
 
 val DEFAULT_EXPENSE_CATS = listOf("খাবার", "বাজার", "বাসা ভাড়া", "যাতায়াত", "বিল", "চিকিৎসা", "শিক্ষা", "বিনোদন", "অন্যান্য")
 val DEFAULT_INCOME_CATS = listOf("বেতন", "ব্যবসা", "উপহার", "অন্যান্য আয়")
@@ -312,13 +312,13 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             """
             SELECT d.category, d.total,
                    d.total - IFNULL((SELECT SUM(amount) FROM txns WHERE debt_id = d.id AND is_payment = 1), 0),
-                   d.date
+                   d.date, d.id
             FROM debts d WHERE d.is_expense = 1 AND d.date >= ?
             """.trimIndent(),
             arrayOf(start),
         ).use { c ->
             while (c.moveToNext()) {
-                items += c.getString(3) to MonthItem("${c.getString(0)} • ${c.getString(3).take(10)}", c.getDouble(1), c.getDouble(2))
+                items += c.getString(3) to MonthItem("${c.getString(0)} • ${c.getString(3).take(10)}", c.getDouble(1), c.getDouble(2), c.getLong(4))
             }
         }
         return items.sortedByDescending { it.first }.map { it.second }
