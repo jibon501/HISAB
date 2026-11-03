@@ -182,7 +182,7 @@ private fun AddAccountDialog(
 /** ধরনের তালিকা থেকে "নতুন ধরন" বাছার বিশেষ মান */
 private const val NEW_TYPE = "__new_type__"
 
-/** নাম বদল। নিচের বাটনের ক্রম: সংরক্ষণ, বাতিল, মুছুন */
+/** নাম বদল। নিচের বাটন: সংরক্ষণ, মুছুন (বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়) */
 @Composable
 private fun EditAccountDialog(
     account: Account,
@@ -206,7 +206,6 @@ private fun EditAccountDialog(
                 TextButton(onClick = {
                     if (name.isBlank()) ctx.toast("নাম খালি রাখা যাবে না") else onSave(name.trim())
                 }) { Text("সংরক্ষণ") }
-                TextButton(onClick = onDismiss) { Text("বাতিল") }
                 TextButton(onClick = onDelete) {
                     Text("মুছুন", color = MaterialTheme.colorScheme.error)
                 }

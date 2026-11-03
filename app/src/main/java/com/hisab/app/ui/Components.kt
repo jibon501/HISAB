@@ -97,12 +97,14 @@ fun <T> Picker(
     options: List<T>,
     selected: T?,
     text: (T) -> String,
+    fieldText: (T) -> String = text, // বন্ধ ঘরে যা দেখাবে (তালিকায় text দেখায়)
     onSelect: (T) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
-            value = selected?.let(text) ?: "",
+            value = selected?.let(fieldText) ?: "",
+            singleLine = true,
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },

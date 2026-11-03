@@ -19,6 +19,14 @@ import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -132,11 +140,11 @@ fun TransactionsScreen(vm: HisabViewModel) {
             expenseCats = vm.categories.filter { it.kind == "expense" }.map { it.name },
             incomeCats = vm.categories.filter { it.kind == "income" }.map { it.name },
             onDismiss = { showAdd = false },
-            onSave = { type, splits, cat, note, baki ->
+            onSave = { type, splits, cat, note, baki, date ->
                 // তালিকায় না থাকা নতুন খাত লিখলে নিজে থেকে সেভ হয়ে যায়
                 vm.addCategory(cat, if (type == "debit") "expense" else "income")
-                if (baki) vm.addBakiExpense(splits.sumOf { it.second }, cat, note)
-                else vm.addTxns(type, splits, cat, note)
+                if (baki) vm.addBakiExpense(splits.sumOf { it.second }, cat, note, date)
+                else vm.addTxns(type, splits, cat, note, date)
                 showAdd = false
             },
         )
@@ -211,7 +219,7 @@ private fun AddTxnDialog(
     expenseCats: List<String>,
     incomeCats: List<String>,
     onDismiss: () -> Unit,
-    onSave: (type: String, splits: List<Pair<Long?, Double>>, category: String, note: String, baki: Boolean) -> Unit,
+    onSave: (type: String, splits: List<Pair<Long?, Double>>, category: String, note: String, baki: Boolean, date: LocalDate) -> Unit,
 ) {
     val ctx = LocalContext.current
     var type by remember { mutableStateOf("debit") }
@@ -219,6 +227,8 @@ private fun AddTxnDialog(
     var cat by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var baki by remember { mutableStateOf(false) }
+    var date by remember { mutableStateOf(LocalDate.now()) }
+    var pickDate by remember { mutableStateOf(false) }
 
     FormDialog(
         title = "নতুন লেনদেন",
@@ -234,7 +244,7 @@ private fun AddTxnDialog(
                 ctx.toast("খাত দিন")
             } else {
                 // অ্যাকাউন্ট না বাছলে লেনদেনটা "অন্যান্য" হিসেবে সেভ হয়
-                onSave(type, splits.map { it.first?.id to it.second }, c, note.trim(), isBaki)
+                onSave(type, splits.map { it.first?.id to it.second }, c, note.trim(), isBaki, date)
             }
         },
     ) {
@@ -259,7 +269,7 @@ private fun AddTxnDialog(
                 accounts = if (type == "debit") accounts.withMoney() else accounts,
                 lines = lines,
                 onChange = { lines = it },
-                accountLabel = if (type == "debit") "কোন অ্যাকাউন্ট থেকে কাটবে" else "কোন অ্যাকাউন্টে জমা হবে",
+                accountLabel = if (type == "debit") "অ্যাকাউন্ট থেকে কাটবে" else "অ্যাকাউন্টে জমা হবে",
             )
         }
         CategoryField(if (type == "debit") expenseCats else incomeCats, cat) { cat = it }
@@ -274,6 +284,36 @@ private fun AddTxnDialog(
             }
         }
         TextInput(note, { note = it }, "নোট")
+        // সবার নিচে: আজকের তারিখ দেখায়, চাপলে আগের তারিখ বাছা যায়
+        OutlinedButton(onClick = { pickDate = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("তারিখ: ${fmtDate(date.toString())}")
+        }
+    }
+
+    if (pickDate) {
+        // আজকের পরের তারিখ বাছা যায় না
+        val todayUtc = LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis <= todayUtc
+                override fun isSelectableYear(year: Int): Boolean = year <= LocalDate.now().year
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { ms ->
+                        date = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate()
+                    }
+                    pickDate = false
+                }) { Text("ঠিক আছে") }
+            },
+            dismissButton = { TextButton(onClick = { pickDate = false }) { Text("বাতিল") } },
+        ) {
+            DatePicker(state = state)
+        }
     }
 }
 

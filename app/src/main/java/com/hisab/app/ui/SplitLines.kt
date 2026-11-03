@@ -40,18 +40,25 @@ fun SplitLines(
         lines.forEachIndexed { i, line ->
             // একই অ্যাকাউন্ট আরেক লাইনে বাছা থাকলে এখানে দেখানো হয় না
             val options = accounts.filter { a -> a.id == line.acc?.id || lines.none { it.acc?.id == a.id } }
-            Picker(
-                label = if (lines.size > 1) "$accountLabel (${i + 1})" else accountLabel,
-                options = options,
-                selected = line.acc,
-                text = { "${it.name} (${tk(it.balance)})" },
-            ) { sel -> onChange(lines.toMutableList().also { it[i] = line.copy(acc = sel) }) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // অ্যাকাউন্ট ও টাকা এক লাইনে পাশাপাশি
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(Modifier.weight(1.25f)) {
+                    Picker(
+                        label = if (lines.size > 1) "$accountLabel (${i + 1})" else accountLabel,
+                        options = options,
+                        selected = line.acc,
+                        text = { "${it.name} (${tk(it.balance)})" },
+                        fieldText = { it.name },
+                    ) { sel -> onChange(lines.toMutableList().also { it[i] = line.copy(acc = sel) }) }
+                }
                 Box(Modifier.weight(1f)) {
                     MoneyField(
                         value = line.amount,
                         onChange = { v -> onChange(lines.toMutableList().also { it[i] = line.copy(amount = v) }) },
-                        label = "টাকার পরিমাণ",
+                        label = "টাকা",
                     )
                 }
                 if (lines.size > 1) {

@@ -53,11 +53,11 @@ fun ExcelBar(vm: HisabViewModel) {
         OutlinedButton(
             onClick = { exportLauncher.launch("hisab-backup-${LocalDate.now()}.xlsx") },
             modifier = Modifier.weight(1f),
-        ) { Text("এক্সপোর্ট (xlsx)") }
+        ) { Text("এক্সপোর্ট") }
         OutlinedButton(
             onClick = { importLauncher.launch(arrayOf("*/*")) },
             modifier = Modifier.weight(1f),
-        ) { Text("ইম্পোর্ট (xlsx)") }
+        ) { Text("ইম্পোর্ট") }
     }
 
     pendingImport?.let { uri ->
