@@ -38,6 +38,9 @@ data class Debt(
     val date: String,
 )
 
+/** ডিফল্ট অ্যাকাউন্টের নাম (সম্পদের অধীনে)। অ্যাকাউন্ট ছাড়া লেনদেন এতে জমা হয় */
+const val OTHER_ACCOUNT = "অন্যান্য"
+
 /** খাত (kind: expense = খরচ, income = আয়) */
 data class Category(val id: Long, val name: String, val kind: String)
 
@@ -70,8 +73,9 @@ object Kind {
  *
  * ভার্সন ২: অ্যাকাউন্টে আইকন কলাম যোগ হয়েছে।
  * ভার্সন ৩: খাত টেবিল, বাকি-খরচ (debts.is_expense) এবং IFIC BANK নাম।
+ * ভার্সন ৪: সম্পদের অধীনে ডিফল্ট "অন্যান্য" অ্যাকাউন্ট; অ্যাকাউন্ট ছাড়া লেনদেন এতেই জমা হয়।
  */
-class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3) {
+class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -100,6 +104,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             Triple("DPS ১", "dps", "savings"),
             Triple("DPS ২", "dps", "savings2"),
             Triple("জমি (ইনভেস্ট)", "asset", "land"),
+            Triple(OTHER_ACCOUNT, "asset", ""),
         )
         createCategories(db)
         seed.forEach { (name, type, icon) ->
@@ -122,6 +127,24 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             createCategories(db)
             db.execSQL("UPDATE accounts SET name = 'IFIC BANK' WHERE name = 'TFIC Bank'")
         }
+        if (oldVersion < 4) {
+            // আগের সংস্করণে অ্যাকাউন্ট ছাড়া সেভ হওয়া লেনদেন (আইডি ০) এখন "অন্যান্য" অ্যাকাউন্টে আসে
+            val id = otherAccountId(db)
+            db.execSQL("UPDATE txns SET account_id = ? WHERE account_id = 0", arrayOf<Any>(id))
+        }
+    }
+
+    /** ডিফল্ট "অন্যান্য" অ্যাকাউন্টের আইডি; না থাকলে (মোছা হলে) নতুন করে বানায় */
+    private fun otherAccountId(db: SQLiteDatabase): Long {
+        db.rawQuery("SELECT id FROM accounts WHERE name = ? LIMIT 1", arrayOf(OTHER_ACCOUNT)).use { c ->
+            if (c.moveToFirst()) return c.getLong(0)
+        }
+        return db.insertOrThrow("accounts", null, ContentValues().apply {
+            put("name", OTHER_ACCOUNT)
+            put("type", "asset")
+            put("opening", 0.0)
+            put("icon", "")
+        })
     }
 
     private fun createCategories(db: SQLiteDatabase) {
@@ -242,6 +265,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
         debtId: Long? = null,
         isPayment: Boolean = false,
         ref: String? = null,
+        date: LocalDateTime? = null,
     ) {
         val v = ContentValues().apply {
             put("type", type)
@@ -249,7 +273,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             put("account_id", accountId)
             put("category", category)
             put("note", note)
-            put("date", LocalDateTime.now().toString())
+            put("date", (date ?: LocalDateTime.now()).toString())
             if (debtId != null) put("debt_id", debtId) else putNull("debt_id")
             put("is_payment", if (isPayment) 1 else 0)
             if (ref != null) put("ref", ref) else putNull("ref")
@@ -261,11 +285,21 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
         insertTxn(writableDatabase, type, amount, accountId, category, note)
     }
 
-    /** একাধিক অ্যাকাউন্টে ভাগ করা লেনদেন (অ্যাকাউন্ট না থাকলে আইডি ০ = "অন্যান্য") */
-    fun addTxns(type: String, splits: List<Pair<Long?, Double>>, category: String, note: String) {
+    /**
+     * একাধিক অ্যাকাউন্টে ভাগ করা লেনদেন। অ্যাকাউন্ট না থাকলে "অন্যান্য" অ্যাকাউন্টে যায়।
+     * তারিখ আগের হতে পারে; সময় এখনকার সময় ধরা হয় (সাজানোর ক্রম ঠিক রাখতে)।
+     */
+    fun addTxns(
+        type: String,
+        splits: List<Pair<Long?, Double>>,
+        category: String,
+        note: String,
+        date: LocalDate = LocalDate.now(),
+    ) {
+        val at = LocalDateTime.of(date, java.time.LocalTime.now())
         writableDatabase.transaction {
             splits.forEach { (accountId, amount) ->
-                insertTxn(this, type, amount, accountId ?: 0L, category, note)
+                insertTxn(this, type, amount, accountId ?: otherAccountId(this), category, note, date = at)
             }
         }
     }
@@ -444,13 +478,13 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
     }
 
     /** বাকিতে খরচ: অ্যাকাউন্ট থেকে টাকা কাটে না, দোকান বাকিতে জমা হয় এবং মাসের খরচে ধরা হয় */
-    fun addBakiExpense(amount: Double, category: String, note: String) {
+    fun addBakiExpense(amount: Double, category: String, note: String, date: LocalDate = LocalDate.now()) {
         writableDatabase.insertOrThrow("debts", null, ContentValues().apply {
             put("kind", Kind.SHOP)
             put("person", note.ifBlank { category })
             put("total", amount)
             put("note", note)
-            put("date", LocalDateTime.now().toString())
+            put("date", LocalDateTime.of(date, java.time.LocalTime.now()).toString())
             put("is_expense", 1)
             put("category", category)
         })
