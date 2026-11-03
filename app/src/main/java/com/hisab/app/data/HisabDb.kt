@@ -261,6 +261,15 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
         insertTxn(writableDatabase, type, amount, accountId, category, note)
     }
 
+    /** একাধিক অ্যাকাউন্টে ভাগ করা লেনদেন (অ্যাকাউন্ট না থাকলে আইডি ০ = "অন্যান্য") */
+    fun addTxns(type: String, splits: List<Pair<Long?, Double>>, category: String, note: String) {
+        writableDatabase.transaction {
+            splits.forEach { (accountId, amount) ->
+                insertTxn(this, type, amount, accountId ?: 0L, category, note)
+            }
+        }
+    }
+
     private fun Cursor.toTxns(): List<Txn> = buildList {
         while (moveToNext()) {
             add(Txn(getLong(0), getString(1), getDouble(2), getString(3), getString(4), getString(5), getString(6)))
@@ -389,7 +398,9 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
     /**
      * loan: টাকা অ্যাকাউন্টে জমা হয় | lent: অ্যাকাউন্ট থেকে কাটে | shop: অ্যাকাউন্ট লাগে না
      */
-    fun addDebt(kind: String, person: String, total: Double, note: String, accountId: Long?) {
+    /** একজনের নামে ধার নেওয়া/দেওয়া। একাধিক অ্যাকাউন্টে ভাগ করা যায়; মোট = সব ভাগের যোগফল */
+    fun addDebt(kind: String, person: String, note: String, splits: List<Pair<Long?, Double>>) {
+        val total = splits.sumOf { it.second }
         writableDatabase.transaction {
             val debtId = insertOrThrow("debts", null, ContentValues().apply {
                 put("kind", kind)
@@ -398,17 +409,37 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
                 put("note", note)
                 put("date", LocalDateTime.now().toString())
             })
-            if (accountId != null && kind != Kind.SHOP) {
-                insertTxn(
-                    this,
-                    type = if (kind == Kind.LOAN) "credit" else "debit",
-                    amount = total,
-                    accountId = accountId,
-                    category = if (kind == Kind.LOAN) "লোন গ্রহণ" else "ধার প্রদান",
-                    note = person,
-                    debtId = debtId,
-                )
+            if (kind != Kind.SHOP) {
+                splits.forEach { (accountId, amount) ->
+                    if (accountId != null) {
+                        insertTxn(
+                            this,
+                            type = if (kind == Kind.LOAN) "credit" else "debit",
+                            amount = amount,
+                            accountId = accountId,
+                            category = if (kind == Kind.LOAN) "লোন গ্রহণ" else "ধার প্রদান",
+                            note = person,
+                            debtId = debtId,
+                        )
+                    }
+                }
             }
+        }
+    }
+
+    /** শুধু এই হিসাবের নাম বদল (এর লেনদেনের নোটও বদলায়) */
+    fun renameDebt(id: Long, newName: String) {
+        writableDatabase.transaction {
+            update("debts", ContentValues().apply { put("person", newName) }, "id = ?", arrayOf(id.toString()))
+            update("txns", ContentValues().apply { put("note", newName) }, "debt_id = ?", arrayOf(id.toString()))
+        }
+    }
+
+    /** হিসাব ও তার সব লেনদেন মোছে; ফলে অ্যাকাউন্টের ব্যালেন্স আগের অবস্থায় ফেরে */
+    fun deleteDebt(id: Long) {
+        writableDatabase.transaction {
+            delete("txns", "debt_id = ?", arrayOf(id.toString()))
+            delete("debts", "id = ?", arrayOf(id.toString()))
         }
     }
 
@@ -473,5 +504,84 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 3)
             debtId = debt.id,
             isPayment = true,
         )
+    }
+
+    // ---------- xlsx ইম্পোর্ট / এক্সপোর্ট ----------
+
+    /** টেবিল → (শিটের নাম, কলাম ও ধরন: L = পূর্ণসংখ্যা, D = দশমিক, S = লেখা) */
+    private val sheetSpec = listOf(
+        Triple("accounts", "Accounts", linkedMapOf("id" to 'L', "name" to 'S', "type" to 'S', "opening" to 'D', "icon" to 'S')),
+        Triple(
+            "txns", "Transactions",
+            linkedMapOf(
+                "id" to 'L', "type" to 'S', "amount" to 'D', "account_id" to 'L', "category" to 'S',
+                "note" to 'S', "date" to 'S', "debt_id" to 'L', "is_payment" to 'L', "ref" to 'S',
+            ),
+        ),
+        Triple(
+            "debts", "Debts",
+            linkedMapOf(
+                "id" to 'L', "kind" to 'S', "person" to 'S', "total" to 'D', "note" to 'S',
+                "date" to 'S', "is_expense" to 'L', "category" to 'S',
+            ),
+        ),
+        Triple("categories", "Categories", linkedMapOf("id" to 'L', "name" to 'S', "kind" to 'S')),
+    )
+
+    private val nullableCols = setOf("debt_id", "ref")
+
+    /** সব ডেটা শিট আকারে */
+    fun exportSheets(): List<SheetData> = sheetSpec.map { (table, sheet, cols) ->
+        val names = cols.keys.toList()
+        val rows = readableDatabase.rawQuery("SELECT ${names.joinToString(",")} FROM $table ORDER BY id", null).use { c ->
+            buildList<List<Any?>> {
+                while (c.moveToNext()) {
+                    add(names.indices.map { i ->
+                        when (c.getType(i)) {
+                            Cursor.FIELD_TYPE_NULL -> null
+                            Cursor.FIELD_TYPE_INTEGER -> c.getLong(i)
+                            Cursor.FIELD_TYPE_FLOAT -> c.getDouble(i)
+                            else -> c.getString(i)
+                        }
+                    })
+                }
+            }
+        }
+        SheetData(sheet, names, rows)
+    }
+
+    /** বর্তমান সব ডেটা মুছে ফাইলের ডেটা বসায় (কোনো ভুল হলে আগের ডেটাই থাকে) */
+    fun replaceAll(data: Map<String, List<Map<String, String>>>) {
+        require(data.containsKey("Accounts") && data.containsKey("Transactions") && data.containsKey("Debts")) {
+            "সঠিক ফাইল নয়"
+        }
+        writableDatabase.transaction {
+            sheetSpec.forEach { (table, sheet, _) ->
+                if (data.containsKey(sheet)) delete(table, null, null)
+            }
+            sheetSpec.forEach { (table, sheet, cols) ->
+                data[sheet].orEmpty().forEach { row ->
+                    val v = ContentValues()
+                    cols.forEach { (col, kind) ->
+                        val raw = row[col]?.trim()
+                        if (raw.isNullOrEmpty()) {
+                            when {
+                                col == "id" -> Unit
+                                col in nullableCols -> v.putNull(col)
+                                kind == 'S' -> v.put(col, "")
+                                else -> v.put(col, 0)
+                            }
+                        } else {
+                            when (kind) {
+                                'L' -> v.put(col, raw.toDouble().toLong())
+                                'D' -> v.put(col, raw.toDouble())
+                                else -> v.put(col, raw)
+                            }
+                        }
+                    }
+                    insertOrThrow(table, null, v)
+                }
+            }
+        }
     }
 }
