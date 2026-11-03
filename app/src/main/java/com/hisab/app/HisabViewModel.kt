@@ -169,8 +169,58 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun addDebt(kind: String, person: String, total: Double, note: String, accountId: Long?) =
-        exec { db.addDebt(kind, person, total, note, accountId) }
+    fun addDebt(kind: String, person: String, note: String, splits: List<Pair<Long?, Double>>) =
+        exec { db.addDebt(kind, person, note, splits) }
+
+    /** একাধিক অ্যাকাউন্টে ভাগ করা লেনদেন */
+    fun addTxns(type: String, splits: List<Pair<Long?, Double>>, category: String, note: String) =
+        exec { db.addTxns(type, splits, category, note) }
+
+    /** ধার-হিসাব এডিট: নাম বদল + (দিলে) ফেরত/পরিশোধ, একাধিক অ্যাকাউন্ট থেকেও */
+    fun saveDebtEdit(debt: Debt, newName: String, splits: List<Pair<Long, Double>>) = exec {
+        if (newName != debt.person) db.renameDebt(debt.id, newName)
+        splits.forEach { (accId, amount) -> db.pay(debt.copy(person = newName), amount, accId) }
+    }
+
+    fun deleteDebt(id: Long) = exec { db.deleteDebt(id) }
+
+    /** সব ডেটা xlsx আকারে লেখে। শেষে done(সফল হয়েছে কি না) */
+    fun exportXlsx(out: java.io.OutputStream, done: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try {
+                    com.hisab.app.data.ExcelIO.write(out, db.exportSheets())
+                    true
+                } catch (e: Exception) {
+                    false
+                } finally {
+                    runCatching { out.close() }
+                }
+            }
+            done(ok)
+        }
+    }
+
+    /** xlsx থেকে সব ডেটা ফিরিয়ে আনে (বর্তমান ডেটা মুছে যায়)। শেষে done(সফল হয়েছে কি না) */
+    fun importXlsx(input: java.io.InputStream, done: (Boolean) -> Unit) {
+        val f = filter
+        viewModelScope.launch {
+            var ok = false
+            val s = withContext(Dispatchers.IO) {
+                try {
+                    db.replaceAll(com.hisab.app.data.ExcelIO.read(input))
+                    ok = true
+                } catch (e: Exception) {
+                    // ভুল ফাইল হলে আগের ডেটাই থাকে
+                } finally {
+                    runCatching { input.close() }
+                }
+                load(f)
+            }
+            publish(s)
+            done(ok)
+        }
+    }
 
     fun pay(debt: Debt, amount: Double, accountId: Long) =
         exec { db.pay(debt, amount, accountId) }
