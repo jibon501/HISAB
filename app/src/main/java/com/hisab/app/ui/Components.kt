@@ -8,7 +8,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -101,7 +107,8 @@ fun <T> Picker(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth(),
+            // এন্টার চাপলে কার্সার এই ঘর বাদ দিয়ে পরের লেখার ঘরে যায়
+            modifier = Modifier.fillMaxWidth().focusProperties { canFocus = false },
         )
         // টেক্সটফিল্ডের উপর অদৃশ্য ক্লিক এলাকা
         Box(Modifier.matchParentSize().clickable { open = true })
@@ -128,23 +135,33 @@ fun MoneyField(value: String, onChange: (String) -> Unit) {
 /** কাস্টম লেবেলসহ: MoneyField(x, { x = it }, "লেবেল") */
 @Composable
 fun MoneyField(value: String, onChange: (String) -> Unit, label: String) {
+    val focus = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) onChange(s) },
         label = { Text(label) },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+        keyboardActions = KeyboardActions(onNext = { moveNext(focus) }),
         modifier = Modifier.fillMaxWidth(),
     )
 }
 
+/** এন্টার চাপলে পরের ঘরে যায়; পরের ঘর না থাকলে কিবোর্ড বন্ধ হয় */
+private fun moveNext(focus: FocusManager) {
+    if (!focus.moveFocus(FocusDirection.Down)) focus.clearFocus()
+}
+
 @Composable
 fun TextInput(value: String, onChange: (String) -> Unit, label: String) {
+    val focus = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(label) },
         singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+        keyboardActions = KeyboardActions(onNext = { moveNext(focus) }),
         modifier = Modifier.fillMaxWidth(),
     )
 }

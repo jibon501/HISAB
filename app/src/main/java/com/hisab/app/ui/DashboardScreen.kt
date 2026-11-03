@@ -70,7 +70,7 @@ fun DashboardScreen(vm: HisabViewModel) {
     var paying by remember { mutableStateOf<Long?>(null) } // বাকি খরচের debt id
 
     LazyColumn(
-        contentPadding = PaddingValues(12.dp),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { SummaryCard("ক্যাশ", s.cash, Color(0xFF00897B), Icons.Default.Payments, big = true) { detail = Detail.CASH } }

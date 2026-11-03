@@ -132,11 +132,11 @@ fun TransactionsScreen(vm: HisabViewModel) {
             expenseCats = vm.categories.filter { it.kind == "expense" }.map { it.name },
             incomeCats = vm.categories.filter { it.kind == "income" }.map { it.name },
             onDismiss = { showAdd = false },
-            onSave = { type, amount, accId, cat, note, baki ->
+            onSave = { type, splits, cat, note, baki ->
                 // তালিকায় না থাকা নতুন খাত লিখলে নিজে থেকে সেভ হয়ে যায়
                 vm.addCategory(cat, if (type == "debit") "expense" else "income")
-                if (baki) vm.addBakiExpense(amount, cat, note)
-                else if (accId != null) vm.addTxn(type, amount, accId, cat, note)
+                if (baki) vm.addBakiExpense(splits.sumOf { it.second }, cat, note)
+                else vm.addTxns(type, splits, cat, note)
                 showAdd = false
             },
         )
@@ -188,7 +188,7 @@ private fun TxnRow(t: Txn, onDelete: () -> Unit) {
         headlineContent = { Text(t.category) },
         supportingContent = {
             val note = if (t.note.isNotBlank()) " • ${t.note}" else ""
-            Text("${t.account} • ${fmtDate(t.date)}$note")
+            Text("${t.account.ifEmpty { "অন্যান্য" }} • ${fmtDate(t.date)}$note")
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -211,13 +211,12 @@ private fun AddTxnDialog(
     expenseCats: List<String>,
     incomeCats: List<String>,
     onDismiss: () -> Unit,
-    onSave: (type: String, amount: Double, accountId: Long?, category: String, note: String, baki: Boolean) -> Unit,
+    onSave: (type: String, splits: List<Pair<Long?, Double>>, category: String, note: String, baki: Boolean) -> Unit,
 ) {
     val ctx = LocalContext.current
     var type by remember { mutableStateOf("debit") }
-    var amount by remember { mutableStateOf("") }
+    var lines by remember { mutableStateOf(listOf(SplitLine())) }
     var cat by remember { mutableStateOf("") }
-    var acc by remember { mutableStateOf<Account?>(null) }
     var note by remember { mutableStateOf("") }
     var baki by remember { mutableStateOf(false) }
 
@@ -226,30 +225,43 @@ private fun AddTxnDialog(
         confirmText = "সংরক্ষণ",
         onDismiss = onDismiss,
         onConfirm = {
-            val a = amount.toDoubleOrNull()
             val c = cat.trim()
-            val ac = acc
             val isBaki = type == "debit" && baki
-            if (a == null || a <= 0 || c.isEmpty() || (!isBaki && ac == null)) {
-                ctx.toast(if (isBaki) "পরিমাণ ও খাত দিন" else "পরিমাণ, খাত ও অ্যাকাউন্ট দিন")
+            val splits = lines.splits()
+            if (splits.isEmpty()) {
+                ctx.toast("টাকার পরিমাণ দিন")
+            } else if (c.isEmpty()) {
+                ctx.toast("খাত দিন")
             } else {
-                onSave(type, a, ac?.id, c, note.trim(), isBaki)
+                // অ্যাকাউন্ট না বাছলে লেনদেনটা "অন্যান্য" হিসেবে সেভ হয়
+                onSave(type, splits.map { it.first?.id to it.second }, c, note.trim(), isBaki)
             }
         },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = type == "debit",
-                onClick = { type = "debit"; cat = ""; acc = null },
+                onClick = { type = "debit"; cat = ""; lines = lines.map { it.copy(acc = null) } },
                 label = { Text("খরচ") },
             )
             FilterChip(
                 selected = type == "credit",
-                onClick = { type = "credit"; cat = ""; acc = null },
+                onClick = { type = "credit"; cat = ""; baki = false; lines = lines.map { it.copy(acc = null) } },
                 label = { Text("আয়") },
             )
         }
-        MoneyField(amount) { amount = it }
+        if (type == "debit" && baki) {
+            // বাকি খরচে অ্যাকাউন্ট থেকে টাকা কাটে না, তাই শুধু পরিমাণ
+            MoneyField(lines.first().amount) { v -> lines = listOf(lines.first().copy(acc = null, amount = v)) }
+        } else {
+            SplitLines(
+                // খরচের সময় ০ ব্যালেন্সের অ্যাকাউন্ট দেখানো হয় না
+                accounts = if (type == "debit") accounts.withMoney() else accounts,
+                lines = lines,
+                onChange = { lines = it },
+                accountLabel = if (type == "debit") "কোন অ্যাকাউন্ট থেকে কাটবে" else "কোন অ্যাকাউন্টে জমা হবে",
+            )
+        }
         CategoryField(if (type == "debit") expenseCats else incomeCats, cat) { cat = it }
         if (type == "debit") {
             Row(
@@ -260,15 +272,6 @@ private fun AddTxnDialog(
                 Text("বাকি (এখনো টাকা দিইনি)")
                 Switch(checked = baki, onCheckedChange = { baki = it })
             }
-        }
-        if (!(type == "debit" && baki)) {
-            Picker(
-                label = if (type == "debit") "কোন অ্যাকাউন্ট থেকে কাটবে" else "কোন অ্যাকাউন্টে জমা হবে",
-                // খরচের সময় ০ ব্যালেন্সের অ্যাকাউন্ট দেখানো হয় না
-                options = if (type == "debit") accounts.withMoney() else accounts,
-                selected = acc,
-                text = { "${it.name} (${tk(it.balance)})" },
-            ) { acc = it }
         }
         TextInput(note, { note = it }, "নোট")
     }

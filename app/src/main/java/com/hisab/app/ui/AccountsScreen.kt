@@ -60,6 +60,7 @@ fun AccountsScreen(vm: HisabViewModel) {
         },
     ) { pad ->
         LazyColumn(Modifier.padding(pad)) {
+            item(key = "excel_bar") { ExcelBar(vm) }
             typeOrder.forEach { type ->
                 val label = typeLabel(type)
                 val group = vm.accounts.filter { it.type == type }
