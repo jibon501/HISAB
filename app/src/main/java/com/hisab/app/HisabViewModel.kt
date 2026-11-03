@@ -129,8 +129,8 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     /** একজনের ধার-হিসাবের তালিকা (শুধু দেখার জন্য) */
     fun debtHistory(kind: String, person: String): List<HistoryItem> = db.debtHistory(kind, person)
 
-    fun addBakiExpense(amount: Double, category: String, note: String) =
-        exec { db.addBakiExpense(amount, category, note) }
+    fun addBakiExpense(amount: Double, category: String, note: String, date: java.time.LocalDate) =
+        exec { db.addBakiExpense(amount, category, note, date) }
 
     fun addCategory(name: String, kind: String) = exec { db.addCategory(name, kind) }
 
@@ -173,8 +173,13 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         exec { db.addDebt(kind, person, note, splits) }
 
     /** একাধিক অ্যাকাউন্টে ভাগ করা লেনদেন */
-    fun addTxns(type: String, splits: List<Pair<Long?, Double>>, category: String, note: String) =
-        exec { db.addTxns(type, splits, category, note) }
+    fun addTxns(
+        type: String,
+        splits: List<Pair<Long?, Double>>,
+        category: String,
+        note: String,
+        date: java.time.LocalDate,
+    ) = exec { db.addTxns(type, splits, category, note, date) }
 
     /** ধার-হিসাব এডিট: নাম বদল + (দিলে) ফেরত/পরিশোধ, একাধিক অ্যাকাউন্ট থেকেও */
     fun saveDebtEdit(debt: Debt, newName: String, splits: List<Pair<Long, Double>>) = exec {
