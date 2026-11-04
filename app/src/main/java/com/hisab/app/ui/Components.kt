@@ -1,6 +1,23 @@
 package com.hisab.app.ui
 
 import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -91,6 +108,43 @@ fun FormDialog(
     )
 }
 
+/**
+ * বক্স: লেখা (label) বক্সের উপরের দাগের ওপর বসে, ভেতরটা ফাঁকা থাকে (লেখা সবসময় দাগের ওপরেই থাকে)।
+ * ফোকাস থাকলে দাগ ও লেখা প্রাইমারি রঙের হয়।
+ */
+@Composable
+private fun BorderLabelBox(
+    label: String,
+    focused: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    Box(modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .border(if (focused) 2.dp else 1.dp, color, RoundedCornerShape(4.dp))
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart,
+            content = content,
+        )
+        Text(
+            label,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(start = 12.dp, end = 12.dp)
+                .offset(y = (-8).dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(horizontal = 4.dp),
+        )
+    }
+}
+
 /** ড্রপডাউন সিলেক্টর */
 @Composable
 fun <T> Picker(
@@ -99,24 +153,26 @@ fun <T> Picker(
     selected: T?,
     text: (T) -> String,
     fieldText: (T) -> String = text, // বন্ধ ঘরে যা দেখাবে (তালিকায় text দেখায়)
-    inside: Boolean = false, // true হলে লেখাটা ঘরের ভেতরে ফিকে লেখা হিসেবে থাকে, ঘর ফাঁকা দেখায়
     onSelect: (T) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = selected?.let(fieldText) ?: "",
-            singleLine = true,
-            onValueChange = {},
-            readOnly = true,
-            label = if (inside) null else ({ Text(label) }),
-            placeholder = if (inside) ({ Text(label) }) else null,
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-            // এন্টার চাপলে কার্সার এই ঘর বাদ দিয়ে পরের লেখার ঘরে যায়
-            modifier = Modifier.fillMaxWidth().focusProperties { canFocus = false },
-        )
-        // টেক্সটফিল্ডের উপর অদৃশ্য ক্লিক এলাকা
-        Box(Modifier.matchParentSize().clickable { open = true })
+        BorderLabelBox(label = label, focused = open) {
+            Row(
+                // এন্টার চাপলে কার্সার এই ঘর বাদ দিয়ে পরের লেখার ঘরে যায়
+                Modifier.fillMaxWidth().focusProperties { canFocus = false }.clickable { open = true },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    selected?.let(fieldText) ?: "",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            }
+        }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { o ->
                 DropdownMenuItem(
@@ -139,18 +195,25 @@ fun MoneyField(value: String, onChange: (String) -> Unit) {
 
 /** কাস্টম লেবেলসহ: MoneyField(x, { x = it }, "লেবেল") */
 @Composable
-fun MoneyField(value: String, onChange: (String) -> Unit, label: String, inside: Boolean = false) {
+fun MoneyField(value: String, onChange: (String) -> Unit, label: String) {
     val focus = LocalFocusManager.current
-    OutlinedTextField(
-        value = value,
-        onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) onChange(s) },
-        label = if (inside) null else ({ Text(label) }),
-        placeholder = if (inside) ({ Text(label) }) else null,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-        keyboardActions = KeyboardActions(onNext = { moveNext(focus) }),
-        modifier = Modifier.fillMaxWidth(),
-    )
+    var focused by remember { mutableStateOf(false) }
+    BorderLabelBox(label = label, focused = focused) {
+        BasicTextField(
+            value = value,
+            onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) onChange(s) },
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { moveNext(focus) }),
+            modifier = Modifier.fillMaxSize().onFocusChanged { focused = it.isFocused },
+            // বক্সের যেকোনো জায়গায় চাপলে লেখার ঘরে কার্সার আসে
+            decorationBox = { inner ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) { inner() }
+            },
+        )
+    }
 }
 
 /** এন্টার চাপলে পরের ঘরে যায়; পরের ঘর না থাকলে কিবোর্ড বন্ধ হয় */
@@ -161,13 +224,21 @@ private fun moveNext(focus: FocusManager) {
 @Composable
 fun TextInput(value: String, onChange: (String) -> Unit, label: String) {
     val focus = LocalFocusManager.current
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-        keyboardActions = KeyboardActions(onNext = { moveNext(focus) }),
-        modifier = Modifier.fillMaxWidth(),
-    )
+    var focused by remember { mutableStateOf(false) }
+    BorderLabelBox(label = label, focused = focused) {
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { moveNext(focus) }),
+            modifier = Modifier.fillMaxSize().onFocusChanged { focused = it.isFocused },
+            // বক্সের যেকোনো জায়গায় চাপলে লেখার ঘরে কার্সার আসে
+            decorationBox = { inner ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) { inner() }
+            },
+        )
+    }
 }
