@@ -27,6 +27,7 @@ data class Txn(
     val category: String,
     val note: String,
     val date: String,
+    val baki: Boolean = false, // বাকি খরচ (পরে পরিশোধ হবে); id = −(হিসাবের আইডি)
 )
 
 data class Debt(
@@ -310,17 +311,30 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
         }
     }
 
+    /** লেনদেনের তালিকা (বাকি খরচসহ), তারিখ অনুযায়ী নতুন আগে: আজকের তারিখ সবার উপরে */
     fun txns(category: String?): List<Txn> {
         val where = if (category == null) "" else "WHERE t.category = ?"
         val args = if (category == null) null else arrayOf(category)
-        return readableDatabase.rawQuery(
+        val db = readableDatabase
+        val list = db.rawQuery(
             """
             SELECT t.id, t.type, t.amount, IFNULL(a.name, ''), t.category, t.note, t.date
             FROM txns t LEFT JOIN accounts a ON a.id = t.account_id
-            $where ORDER BY t.id DESC
+            $where
             """.trimIndent(),
             args,
-        ).use { c -> c.toTxns() }
+        ).use { c -> c.toTxns() }.toMutableList()
+        // বাকি খরচ: অ্যাকাউন্ট থেকে টাকা কাটেনি, তবু তালিকায় "বাকি" চিহ্নসহ থাকে
+        val bakiWhere = if (category == null) "" else "AND category = ?"
+        db.rawQuery(
+            "SELECT id, total, category, note, date FROM debts WHERE is_expense = 1 $bakiWhere",
+            args,
+        ).use { c ->
+            while (c.moveToNext()) {
+                list += Txn(-c.getLong(0), "debit", c.getDouble(1), "", c.getString(2), c.getString(3), c.getString(4), baki = true)
+            }
+        }
+        return list.sortedWith(compareByDescending<Txn> { it.date }.thenByDescending { it.id })
     }
 
     /** লেনদেনে যেসব খাত সত্যিই আছে (ফিল্টার মেনুর জন্য) */
@@ -433,15 +447,22 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
      * loan: টাকা অ্যাকাউন্টে জমা হয় | lent: অ্যাকাউন্ট থেকে কাটে | shop: অ্যাকাউন্ট লাগে না
      */
     /** একজনের নামে ধার নেওয়া/দেওয়া। একাধিক অ্যাকাউন্টে ভাগ করা যায়; মোট = সব ভাগের যোগফল */
-    fun addDebt(kind: String, person: String, note: String, splits: List<Pair<Long?, Double>>) {
+    fun addDebt(
+        kind: String,
+        person: String,
+        note: String,
+        splits: List<Pair<Long?, Double>>,
+        date: LocalDate = LocalDate.now(),
+    ) {
         val total = splits.sumOf { it.second }
+        val at = LocalDateTime.of(date, java.time.LocalTime.now())
         writableDatabase.transaction {
             val debtId = insertOrThrow("debts", null, ContentValues().apply {
                 put("kind", kind)
                 put("person", person)
                 put("total", total)
                 put("note", note)
-                put("date", LocalDateTime.now().toString())
+                put("date", at.toString())
             })
             if (kind != Kind.SHOP) {
                 splits.forEach { (accountId, amount) ->
@@ -454,11 +475,31 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
                             category = if (kind == Kind.LOAN) "লোন গ্রহণ" else "ধার প্রদান",
                             note = person,
                             debtId = debtId,
+                            date = at,
                         )
                     }
                 }
             }
         }
+    }
+
+    /** একটি ধার-হিসাবের সব এন্ট্রি (প্রথম ধার + প্রতিটি ফেরত/পরিশোধ), পুরনো আগে */
+    fun debtEntries(id: Long): List<HistoryItem> {
+        val db = readableDatabase
+        val out = mutableListOf<HistoryItem>()
+        db.rawQuery("SELECT kind, date, total FROM debts WHERE id = ?", arrayOf(id.toString())).use { c ->
+            if (c.moveToFirst()) {
+                val label = if (c.getString(0) == Kind.LENT) "ধার দেওয়া" else "ধার নেওয়া"
+                out += HistoryItem(c.getString(1), label, c.getDouble(2), false)
+            }
+        }
+        db.rawQuery(
+            "SELECT date, amount FROM txns WHERE debt_id = ? AND is_payment = 1",
+            arrayOf(id.toString()),
+        ).use { c ->
+            while (c.moveToNext()) out += HistoryItem(c.getString(0), "ফেরত", c.getDouble(1), true)
+        }
+        return out.sortedBy { it.date }
     }
 
     /** শুধু এই হিসাবের নাম বদল (এর লেনদেনের নোটও বদলায়) */
