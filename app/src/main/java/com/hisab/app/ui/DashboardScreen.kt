@@ -79,8 +79,8 @@ fun DashboardScreen(vm: HisabViewModel) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { SummaryCard("ক্যাশ", s.cash, Color(0xFF00897B), Icons.Default.Payments, big = true) { detail = Detail.CASH } }
-        item { SummaryCard("মোট পাওনা", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
-        item { SummaryCard("ধার নেওয়া", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
+        item { SummaryCard("আমি দিয়েছি", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
+        item { SummaryCard("আমি নিয়েছি", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
         item { SummaryCard("এই মাসের খরচ", s.monthExpense, Color(0xFF8E24AA), Icons.Default.ShoppingCart) { detail = Detail.EXPENSE } }
         item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
         item { SummaryCard("সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
@@ -216,7 +216,7 @@ private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, 
     val ctx = LocalContext.current
     val items = remember(kind, person, vm.debts) { vm.debtHistory(kind, person) }
     val remaining = items.sumOf { if (it.payment) -it.amount else it.amount }
-    val kindLabel = if (kind == Kind.LENT) "ধার দেওয়া" else "ধার নেওয়া"
+    val kindLabel = if (kind == Kind.LENT) "আমি দিয়েছি" else "আমি নিয়েছি"
     // একবার সেভ করা হলে শেয়ারে একই ছবি ব্যবহার হয়, দুটো কপি হয় না
     var savedUri by remember(kind, person) { mutableStateOf<android.net.Uri?>(null) }
 

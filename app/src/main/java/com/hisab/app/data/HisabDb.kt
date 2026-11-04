@@ -347,7 +347,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
     fun debtHistory(kind: String, person: String): List<HistoryItem> {
         val db = readableDatabase
         val out = mutableListOf<HistoryItem>()
-        val firstLabel = if (kind == Kind.LENT) "ধার দেওয়া" else "ধার নেওয়া"
+        val firstLabel = if (kind == Kind.LENT) "আমি দিয়েছি" else "আমি নিয়েছি"
         db.rawQuery(
             "SELECT date, total FROM debts WHERE kind = ? AND person = ?",
             arrayOf(kind, person),
@@ -489,7 +489,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
         val out = mutableListOf<HistoryItem>()
         db.rawQuery("SELECT kind, date, total FROM debts WHERE id = ?", arrayOf(id.toString())).use { c ->
             if (c.moveToFirst()) {
-                val label = if (c.getString(0) == Kind.LENT) "ধার দেওয়া" else "ধার নেওয়া"
+                val label = if (c.getString(0) == Kind.LENT) "আমি দিয়েছি" else "আমি নিয়েছি"
                 out += HistoryItem(c.getString(1), label, c.getDouble(2), false)
             }
         }

@@ -33,8 +33,8 @@ private data class NavTab(val label: String, val icon: ImageVector)
 private val TABS = listOf(
     NavTab("ড্যাশবোর্ড", Icons.Default.Dashboard),
     NavTab("লেনদেন", Icons.Default.Receipt),
-    NavTab("ধার দেওয়া", Icons.Default.TrendingUp),
-    NavTab("ধার নেওয়া", Icons.Default.TrendingDown),
+    NavTab("আমি দিয়েছি", Icons.Default.TrendingUp),
+    NavTab("আমি নিয়েছি", Icons.Default.TrendingDown),
     NavTab("অ্যাকাউন্ট", Icons.Default.AccountBalanceWallet),
 )
 

@@ -51,7 +51,7 @@ import com.hisab.app.data.Kind
 import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.fmtDate
 
-/** ধার দেওয়া / ধার নেওয়া: প্রতিটির আলাদা তালিকা। নতুন ধার যোগ হয় লেনদেনের নতুন ফর্ম থেকে */
+/** আমি দিয়েছি / আমি নিয়েছি: প্রতিটির আলাদা তালিকা। নতুন ধার যোগ হয় লেনদেনের নতুন ফর্ম থেকে */
 @Composable
 fun DebtsScreen(vm: HisabViewModel, kind: String) {
     var editTarget by remember { mutableStateOf<Debt?>(null) }
