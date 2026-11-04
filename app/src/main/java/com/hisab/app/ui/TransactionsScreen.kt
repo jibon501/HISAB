@@ -226,16 +226,17 @@ private fun TxnRow(t: Txn, index: Int, onDelete: () -> Unit) {
         )
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(t.category, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(t.category, fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium)
                 if (t.baki) {
-                    Text("  বাকি", fontSize = 11.sp, color = Color(0xFFFB8C00), fontWeight = FontWeight.Bold)
+                    Text("  বাকি", fontSize = 11.sp, lineHeight = 16.sp, color = Color(0xFFFB8C00), fontWeight = FontWeight.Bold)
                 } else if (t.category in DEBT_CATS && t.note.isNotBlank()) {
-                    Text("  ${t.note}", fontSize = 11.sp, color = Color.Gray)
+                    Text("  ${t.note}", fontSize = 11.sp, lineHeight = 16.sp, color = Color.Gray)
                 }
             }
             val note = if (t.note.isNotBlank() && !t.baki && t.category !in DEBT_CATS) " • ${t.note}" else ""
             val bakiNote = if (t.baki && t.note.isNotBlank()) " • ${t.note}" else ""
-            Text("${fmtDate(t.date)}$note$bakiNote", fontSize = 11.sp, color = Color.Gray)
+            // খাতের নামের ঠিক নিচে, কোনো ফাঁকা ছাড়া
+            Text("${fmtDate(t.date)}$note$bakiNote", fontSize = 11.sp, lineHeight = 12.sp, color = Color.Gray)
         }
         Text(
             (if (credit) "+" else "-") + tk(t.amount),

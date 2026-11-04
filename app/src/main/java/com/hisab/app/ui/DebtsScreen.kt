@@ -148,31 +148,14 @@ private fun DebtEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (done) "পরিশোধিত ✓" else "বাকি ${tk(debt.remaining)}") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (!editing) {
-                    // শুধু দেখার অবস্থা
-                    Text(debt.person, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    HorizontalDivider()
-                    entries.forEach { h ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column(Modifier.weight(1f)) {
-                                Text(fmtDate(h.date), fontSize = 12.sp)
-                                Text(h.label)
-                            }
-                            Text(
-                                tk(h.amount),
-                                fontWeight = FontWeight.Bold,
-                                color = if (h.payment) Color(0xFF2E7D32) else Color.Unspecified,
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                    Text("বাকি: ${tk(debt.remaining)}", fontWeight = FontWeight.Bold)
+                    // শুধু দেখার অবস্থা: নাম মাঝখানে, তিন কলাম, নিচে মোট
+                    DebtTable(debt.person, entries)
                 } else {
                     TextInput(name, { name = it }, "নাম")
                     if (!done) {

@@ -230,29 +230,8 @@ private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, 
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
-            Column {
-                Text(person, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                LazyColumn(Modifier.heightIn(max = 340.dp)) {
-                    items(items) { h ->
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(fmtDate(h.date), fontSize = 12.sp)
-                                Text(h.label)
-                            }
-                            Text(
-                                tk(h.amount),
-                                fontWeight = FontWeight.Bold,
-                                color = if (h.payment) Color(0xFF2E7D32) else Color.Unspecified,
-                            )
-                        }
-                    }
-                }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text("বাকি: ${tk(remaining)}", fontWeight = FontWeight.Bold)
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                DebtTable(person, items)
             }
         },
         // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়

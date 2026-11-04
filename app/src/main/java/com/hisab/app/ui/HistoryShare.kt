@@ -36,8 +36,7 @@ fun buildHistoryBitmap(person: String, kindLabel: String, items: List<HistoryIte
     val bold = Paint(text).apply { typeface = Typeface.DEFAULT_BOLD }
     val line = Paint().apply { color = Color.LTGRAY; strokeWidth = 2f }
 
-    c.drawText(person, pad, 70f, title)
-    c.drawText(kindLabel, pad, 115f, sub)
+    c.drawText(person, (width - title.measureText(person)) / 2f, 85f, title) // নাম মাঝখানে
     c.drawLine(pad, headH - 12f, width - pad, headH - 12f, line)
 
     var y = headH + 40f
@@ -53,7 +52,7 @@ fun buildHistoryBitmap(person: String, kindLabel: String, items: List<HistoryIte
     }
 
     c.drawLine(pad, y - rowH + 28f, width - pad, y - rowH + 28f, line)
-    val rest = "বাকি: ${tk(remaining)}"
+    val rest = "মোট=${tk(remaining)}"
     c.drawText(rest, width - pad - bold.measureText(rest), y + 20f, bold)
     return bmp
 }
@@ -104,7 +103,7 @@ fun shareText(ctx: Context, person: String, kindLabel: String, items: List<Histo
             remaining += if (h.payment) -h.amount else h.amount
             appendLine("${fmtDate(h.date)}  ${h.label}  ${tk(h.amount)}")
         }
-        append("বাকি: ${tk(remaining)}")
+        append("মোট=${tk(remaining)}")
     }
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
