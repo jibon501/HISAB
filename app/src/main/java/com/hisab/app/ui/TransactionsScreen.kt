@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -57,6 +57,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hisab.app.HisabViewModel
+import com.hisab.app.data.Kind
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import com.hisab.app.data.Account
 import com.hisab.app.data.Txn
 
@@ -124,7 +134,7 @@ fun TransactionsScreen(vm: HisabViewModel) {
             } else {
                 // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি (+) বাটন ও মোটের নিচে ঢাকা না পড়ে
                 LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-                    items(vm.txns, key = { it.id }) { t -> TxnRow(t) { toDelete = t } }
+                    itemsIndexed(vm.txns, key = { _, t -> t.id }) { i, t -> TxnRow(t, i) { toDelete = t } }
                 }
             }
             // স্ক্রিনে যা দেখা যাচ্ছে তার নিট মোট (জমা − খরচ): নিচে বামে, ছোট ও ধূসর
@@ -143,12 +153,20 @@ fun TransactionsScreen(vm: HisabViewModel) {
             accounts = vm.accounts,
             expenseCats = vm.categories.filter { it.kind == "expense" }.map { it.name },
             incomeCats = vm.categories.filter { it.kind == "income" }.map { it.name },
+            // আগে সেভ করা ধারের নাম (সাম্প্রতিক আগে), সাজেশনের জন্য
+            personSuggestions = vm.debts.values.flatten().sortedByDescending { it.id }.map { it.person }.distinct(),
             onDismiss = { showAdd = false },
-            onSave = { type, splits, cat, note, baki, date ->
-                // তালিকায় না থাকা নতুন খাত লিখলে নিজে থেকে সেভ হয়ে যায়
-                vm.addCategory(cat, if (type == "debit") "expense" else "income")
-                if (baki) vm.addBakiExpense(splits.sumOf { it.second }, cat, note, date)
-                else vm.addTxns(type, splits, cat, note, date)
+            onSave = { n ->
+                when (n.type) {
+                    "lent" -> vm.addDebt(Kind.LENT, n.person, n.note, n.splits, n.date)
+                    "loan" -> vm.addDebt(Kind.LOAN, n.person, n.note, n.splits, n.date)
+                    else -> {
+                        // তালিকায় না থাকা নতুন খাত লিখলে নিজে থেকে সেভ হয়ে যায়
+                        vm.addCategory(n.category, if (n.type == "debit") "expense" else "income")
+                        if (n.baki) vm.addBakiExpense(n.splits.sumOf { it.second }, n.category, n.note, n.date)
+                        else vm.addTxns(n.type, n.splits, n.category, n.note, n.date)
+                    }
+                }
                 showAdd = false
             },
         )
@@ -185,36 +203,85 @@ fun TransactionsScreen(vm: HisabViewModel) {
     }
 }
 
+/** যে খাতের সারিতে ব্যক্তির নাম (কার থেকে নেওয়া / কাকে দেওয়া) ছোট করে দেখানো হয় */
+private val DEBT_CATS = setOf("লোন গ্রহণ", "ধার প্রদান", "লোন পরিশোধ", "ধার ফেরত", "দোকান বাকি পরিশোধ")
+
+/** ছোট, কাছাকাছি সারি; একটা পরপর হালকা ধূসর ব্যাকগ্রাউন্ড। অ্যাকাউন্টের নাম দেখানো হয় না */
 @Composable
-private fun TxnRow(t: Txn, onDelete: () -> Unit) {
+private fun TxnRow(t: Txn, index: Int, onDelete: () -> Unit) {
     val credit = t.type == "credit"
     val color = if (credit) GREEN else RED
-    ListItem(
-        leadingContent = {
-            Icon(
-                if (credit) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
-                contentDescription = null,
-                tint = color,
-            )
-        },
-        headlineContent = { Text(t.category) },
-        supportingContent = {
-            val note = if (t.note.isNotBlank()) " • ${t.note}" else ""
-            Text("${t.account.ifEmpty { "অন্যান্য" }} • ${fmtDate(t.date)}$note")
-        },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    (if (credit) "+" else "-") + tk(t.amount),
-                    color = color,
-                    fontWeight = FontWeight.Bold,
-                )
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "মুছুন")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (index % 2 == 1) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f) else Color.Transparent)
+            .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (credit) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(18.dp),
+        )
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(t.category, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                if (t.baki) {
+                    Text("  বাকি", fontSize = 11.sp, color = Color(0xFFFB8C00), fontWeight = FontWeight.Bold)
+                } else if (t.category in DEBT_CATS && t.note.isNotBlank()) {
+                    Text("  ${t.note}", fontSize = 11.sp, color = Color.Gray)
                 }
             }
-        },
-    )
+            val note = if (t.note.isNotBlank() && !t.baki && t.category !in DEBT_CATS) " • ${t.note}" else ""
+            val bakiNote = if (t.baki && t.note.isNotBlank()) " • ${t.note}" else ""
+            Text("${fmtDate(t.date)}$note$bakiNote", fontSize = 11.sp, color = Color.Gray)
+        }
+        Text(
+            (if (credit) "+" else "-") + tk(t.amount),
+            color = color,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+        )
+        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Delete, contentDescription = "মুছুন", modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** নতুন লেনদেনের ফর্ম থেকে যা সেভ হবে। type: debit (খরচ) / credit (আয়) / lent (ধার দেওয়া) / loan (ধার নেওয়া) */
+private class NewTxn(
+    val type: String,
+    val splits: List<Pair<Long?, Double>>,
+    val category: String,
+    val note: String,
+    val baki: Boolean,
+    val date: LocalDate,
+    val person: String,
+)
+
+/** চারটি ধরনের একটি বাটন: বাছা থাকলে #191970 রঙের বক্স */
+@Composable
+private fun TypeButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val navy = Color(0xFF191970)
+    val shape = RoundedCornerShape(8.dp)
+    Box(
+        modifier
+            .height(42.dp)
+            .clip(shape)
+            .background(if (selected) navy else Color.Transparent)
+            .border(1.dp, if (selected) navy else MaterialTheme.colorScheme.outline, shape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            fontSize = 12.sp,
+            maxLines = 1,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 @Composable
@@ -222,61 +289,110 @@ private fun AddTxnDialog(
     accounts: List<Account>,
     expenseCats: List<String>,
     incomeCats: List<String>,
+    personSuggestions: List<String>,
     onDismiss: () -> Unit,
-    onSave: (type: String, splits: List<Pair<Long?, Double>>, category: String, note: String, baki: Boolean, date: LocalDate) -> Unit,
+    onSave: (NewTxn) -> Unit,
 ) {
     val ctx = LocalContext.current
     var type by remember { mutableStateOf("debit") }
     var lines by remember { mutableStateOf(listOf(SplitLine())) }
     var cat by remember { mutableStateOf("") }
+    var person by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var baki by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(LocalDate.now()) }
     var pickDate by remember { mutableStateOf(false) }
 
+    val isDebt = type == "lent" || type == "loan"
+
+    // ধরন বদলালে অ্যাকাউন্ট বাছাই ও খাত আবার শুরু থেকে (টাকার পরিমাণ থাকে)
+    fun pick(t: String) {
+        type = t
+        cat = ""
+        if (t != "debit") baki = false
+        lines = lines.map { it.copy(acc = null) }
+    }
+
     FormDialog(
         title = "নতুন লেনদেন",
+        centerTitle = true,
         confirmText = "সংরক্ষণ",
         onDismiss = onDismiss,
         onConfirm = {
+            val splits = lines.splits()
             val c = cat.trim()
             val isBaki = type == "debit" && baki
-            val splits = lines.splits()
-            if (splits.isEmpty()) {
-                ctx.toast("টাকার পরিমাণ দিন")
-            } else if (c.isEmpty()) {
-                ctx.toast("খাত দিন")
-            } else {
-                // অ্যাকাউন্ট না বাছলে লেনদেনটা "অন্যান্য" হিসেবে সেভ হয়
-                onSave(type, splits.map { it.first?.id to it.second }, c, note.trim(), isBaki, date)
+            when {
+                isDebt && person.isBlank() -> ctx.toast("নাম দিন")
+                splits.isEmpty() -> ctx.toast("টাকার পরিমাণ দিন")
+                isDebt && splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
+                !isDebt && c.isEmpty() -> ctx.toast("খাত দিন")
+                // অ্যাকাউন্ট না বাছলে খরচ/আয় "অন্যান্য" অ্যাকাউন্টে যায়
+                else -> onSave(
+                    NewTxn(type, splits.map { it.first?.id to it.second }, c, note.trim(), isBaki, date, person.trim()),
+                )
             }
         },
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = type == "debit",
-                onClick = { type = "debit"; cat = ""; lines = lines.map { it.copy(acc = null) } },
-                label = { Text("খরচ") },
-            )
-            FilterChip(
-                selected = type == "credit",
-                onClick = { type = "credit"; cat = ""; baki = false; lines = lines.map { it.copy(acc = null) } },
-                label = { Text("আয়") },
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TypeButton("খরচ", type == "debit", Modifier.weight(1f)) { pick("debit") }
+            TypeButton("আয়", type == "credit", Modifier.weight(1f)) { pick("credit") }
+            TypeButton("ধার দেওয়া", type == "lent", Modifier.weight(1f)) { pick("lent") }
+            TypeButton("ধার নেওয়া", type == "loan", Modifier.weight(1f)) { pick("loan") }
         }
+
+        if (isDebt) {
+            TextInput(person, { person = it }, if (type == "loan") "কার কাছ থেকে নিলেন" else "কাকে দিলেন")
+            // নামের অক্ষর লিখলেই মিলে যাওয়া আগের নাম দেখায় (শুরুতে মিললে আগে), ট্যাপ করলে নাম বসে যায়
+            val q = person.trim()
+            val shown = if (q.isEmpty()) {
+                emptyList()
+            } else {
+                personSuggestions
+                    .filter { it.contains(q, ignoreCase = true) && !it.equals(q, ignoreCase = true) }
+                    .sortedByDescending { it.startsWith(q, ignoreCase = true) }
+                    .take(5)
+            }
+            if (shown.isNotEmpty()) {
+                Surface(
+                    tonalElevation = 3.dp,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column {
+                        shown.forEach { n ->
+                            Text(
+                                n,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { person = n }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         if (type == "debit" && baki) {
             // বাকি খরচে অ্যাকাউন্ট থেকে টাকা কাটে না, তাই শুধু পরিমাণ
             MoneyField(lines.first().amount) { v -> lines = listOf(lines.first().copy(acc = null, amount = v)) }
         } else {
             SplitLines(
-                // খরচের সময় ০ ব্যালেন্সের অ্যাকাউন্ট দেখানো হয় না
-                accounts = if (type == "debit") accounts.withMoney() else accounts,
+                // টাকা বেরিয়ে গেলে (খরচ / ধার দেওয়া) ০ ব্যালেন্সের অ্যাকাউন্ট দেখানো হয় না
+                accounts = if (type == "debit" || type == "lent") accounts.withMoney() else accounts,
                 lines = lines,
                 onChange = { lines = it },
-                accountLabel = if (type == "debit") "অ্যাকাউন্ট থেকে কাটবে" else "অ্যাকাউন্টে জমা হবে",
+                accountLabel = when (type) {
+                    "debit", "lent" -> "অ্যাকাউন্ট থেকে কাটবে"
+                    else -> "অ্যাকাউন্টে জমা হবে"
+                },
             )
         }
-        CategoryField(if (type == "debit") expenseCats else incomeCats, cat) { cat = it }
+
+        if (!isDebt) {
+            CategoryField(if (type == "debit") expenseCats else incomeCats, cat) { cat = it }
+        }
         if (type == "debit") {
             Row(
                 Modifier.fillMaxWidth(),

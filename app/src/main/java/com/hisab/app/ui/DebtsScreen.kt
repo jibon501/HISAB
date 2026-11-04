@@ -23,6 +23,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -47,23 +48,18 @@ import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Account
 import com.hisab.app.data.Debt
 import com.hisab.app.data.Kind
+import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.fmtDate
 
-/** ধার দেওয়া / ধার নেওয়া: প্রতিটির আলাদা স্ক্রিন, ডানে ভাসমান (+) বাটন */
+/** ধার দেওয়া / ধার নেওয়া: প্রতিটির আলাদা তালিকা। নতুন ধার যোগ হয় লেনদেনের নতুন ফর্ম থেকে */
 @Composable
 fun DebtsScreen(vm: HisabViewModel, kind: String) {
-    var showAdd by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<Debt?>(null) }
     val list = vm.debts[kind].orEmpty()
 
     Scaffold(
         // উপরের অংশের জায়গা বাইরের কাঠামোই ধরে, তাই এখানে আলাদা ইনসেট নেই
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "নতুন")
-            }
-        },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
             if (list.isEmpty()) {
@@ -109,23 +105,10 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
         }
     }
 
-    if (showAdd) {
-        AddDebtDialog(
-            kind = kind,
-            // ধার দিলে টাকা বেরিয়ে যায়, তাই তখন ০ ব্যালেন্সের অ্যাকাউন্ট বাদ
-            accounts = if (kind == Kind.LENT) vm.accounts.withMoney() else vm.accounts,
-            // আগে সেভ করা সব নাম (সাম্প্রতিক আগে), লিখতে শুরু করলে সাজেশন হিসেবে দেখাবে
-            suggestions = vm.debts.values.flatten().sortedByDescending { it.id }.map { it.person }.distinct(),
-            onDismiss = { showAdd = false },
-            onSave = { person, note, splits ->
-                vm.addDebt(kind, person, note, splits)
-                showAdd = false
-            },
-        )
-    }
     editTarget?.let { d ->
         DebtEditDialog(
             debt = d,
+            entries = vm.debtEntries(d.id),
             // ধার পরিশোধে টাকা বেরিয়ে যায়, ধার ফেরত পেলে টাকা ঢোকে
             accounts = if (d.kind == Kind.LOAN) vm.accounts.withMoney() else vm.accounts,
             onDismiss = { editTarget = null },
@@ -141,83 +124,15 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
     }
 }
 
-@Composable
-private fun AddDebtDialog(
-    kind: String,
-    accounts: List<Account>,
-    suggestions: List<String>,
-    onDismiss: () -> Unit,
-    onSave: (person: String, note: String, splits: List<Pair<Long?, Double>>) -> Unit,
-) {
-    val ctx = LocalContext.current
-    var person by remember { mutableStateOf("") }
-    var lines by remember { mutableStateOf(listOf(SplitLine())) }
-    var note by remember { mutableStateOf("") }
-
-    val personLabel = when (kind) {
-        Kind.LOAN -> "কার কাছ থেকে নিলেন"
-        Kind.LENT -> "কাকে দিলেন"
-        else -> "দোকানের নাম"
-    }
-
-    FormDialog(
-        title = "নতুন হিসাব",
-        confirmText = "সংরক্ষণ",
-        onDismiss = onDismiss,
-        onConfirm = {
-            val splits = lines.splits()
-            when {
-                person.isBlank() -> ctx.toast("নাম দিন")
-                splits.isEmpty() -> ctx.toast("টাকার পরিমাণ দিন")
-                kind != Kind.SHOP && splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
-                else -> onSave(person.trim(), note.trim(), splits.map { it.first?.id to it.second })
-            }
-        },
-    ) {
-        TextInput(person, { person = it }, personLabel)
-        // নামের অক্ষর লিখলেই মিলে যাওয়া আগের নামগুলো দেখায় (শুরুতে মিললে আগে), ট্যাপ করলে নাম বসে যায়
-        val q = person.trim()
-        val shown = if (q.isEmpty()) {
-            emptyList()
-        } else {
-            suggestions
-                .filter { it.contains(q, ignoreCase = true) && !it.equals(q, ignoreCase = true) }
-                .sortedByDescending { it.startsWith(q, ignoreCase = true) }
-                .take(5)
-        }
-        if (shown.isNotEmpty()) {
-            Surface(
-                tonalElevation = 3.dp,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column {
-                    shown.forEach { n ->
-                        Text(
-                            n,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { person = n }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                        )
-                    }
-                }
-            }
-        }
-        SplitLines(
-            accounts = accounts,
-            lines = lines,
-            onChange = { lines = it },
-            accountLabel = if (kind == Kind.LOAN) "টাকা কোন অ্যাকাউন্টে জমা হলো" else "টাকা কোন অ্যাকাউন্ট থেকে গেল",
-        )
-        TextInput(note, { note = it }, "নোট")
-    }
-}
-
-/** হিসাবে চাপলে: নাম বদল, ফেরত/পরিশোধ যোগ। নিচের বাটন: সংরক্ষণ, বাতিল, মুছুন */
+/**
+ * হিসাবে চাপলে প্রথমে শুধু দেখার বক্স: নাম, প্রতিটি এন্ট্রি, বাকি।
+ * নিচের বাটন: সম্পাদনা, সংরক্ষণ, মুছুন। "সম্পাদনা" চাপলে নাম বদল ও ফেরত/পরিশোধের লাইন আসে,
+ * তখন "সংরক্ষণ" চালু হয়।
+ */
 @Composable
 private fun DebtEditDialog(
     debt: Debt,
+    entries: List<HistoryItem>,
     accounts: List<Account>,
     onDismiss: () -> Unit,
     onSave: (name: String, splits: List<Pair<Long, Double>>) -> Unit,
@@ -226,6 +141,7 @@ private fun DebtEditDialog(
     val ctx = LocalContext.current
     val lent = debt.kind == Kind.LENT
     val done = debt.remaining <= 0.0
+    var editing by remember(debt.id) { mutableStateOf(false) }
     var name by remember(debt.id) { mutableStateOf(debt.person) }
     var lines by remember(debt.id) { mutableStateOf(listOf(SplitLine())) }
     var confirmDelete by remember(debt.id) { mutableStateOf(false) }
@@ -238,36 +154,60 @@ private fun DebtEditDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TextInput(name, { name = it }, "নাম")
-                if (!done) {
-                    Text(
-                        if (lent) "ফেরত পেলে" else "পরিশোধ করলে",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    SplitLines(
-                        accounts = accounts,
-                        lines = lines,
-                        onChange = { lines = it },
-                        accountLabel = if (lent) "কোন অ্যাকাউন্টে জমা হলো" else "কোন অ্যাকাউন্ট থেকে কাটবে",
-                    )
+                if (!editing) {
+                    // শুধু দেখার অবস্থা
+                    Text(debt.person, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    HorizontalDivider()
+                    entries.forEach { h ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text(fmtDate(h.date), fontSize = 12.sp)
+                                Text(h.label)
+                            }
+                            Text(
+                                tk(h.amount),
+                                fontWeight = FontWeight.Bold,
+                                color = if (h.payment) Color(0xFF2E7D32) else Color.Unspecified,
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                    Text("বাকি: ${tk(debt.remaining)}", fontWeight = FontWeight.Bold)
+                } else {
+                    TextInput(name, { name = it }, "নাম")
+                    if (!done) {
+                        Text(
+                            if (lent) "ফেরত পেলে" else "পরিশোধ করলে",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        SplitLines(
+                            accounts = accounts,
+                            lines = lines,
+                            onChange = { lines = it },
+                            accountLabel = if (lent) "অ্যাকাউন্টে জমা হবে" else "অ্যাকাউন্ট থেকে কাটবে",
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = {
-                    val n = name.trim()
-                    val splits = lines.splits()
-                    val total = splits.sumOf { it.second }
-                    when {
-                        n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
-                        splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
-                        total > debt.remaining + 0.0001 -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
-                        else -> onSave(n, splits.map { (it.first as Account).id to it.second })
-                    }
-                }) { Text("সংরক্ষণ") }
-                TextButton(onClick = onDismiss) { Text("বাতিল") }
+                TextButton(onClick = { editing = true }, enabled = !editing) { Text("সম্পাদনা") }
+                TextButton(
+                    enabled = editing,
+                    onClick = {
+                        val n = name.trim()
+                        val splits = lines.splits()
+                        val total = splits.sumOf { it.second }
+                        when {
+                            n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
+                            splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
+                            total > debt.remaining + 0.0001 -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
+                            else -> onSave(n, splits.map { (it.first as Account).id to it.second })
+                        }
+                    },
+                ) { Text("সংরক্ষণ") }
                 TextButton(onClick = { confirmDelete = true }) {
                     Text("মুছুন", color = MaterialTheme.colorScheme.error)
                 }

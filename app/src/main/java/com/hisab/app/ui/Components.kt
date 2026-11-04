@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
@@ -91,11 +92,15 @@ fun FormDialog(
     confirmText: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    centerTitle: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = {
+            if (centerTitle) Text(title, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            else Text(title)
+        },
         text = {
             androidx.compose.foundation.layout.Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
