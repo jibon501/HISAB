@@ -150,7 +150,8 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
             if (debtId != null && newRemaining != null) db.setDebtRemaining(debtId, newRemaining)
         }
 
-    fun deleteTxn(id: Long) = exec { db.deleteTxn(id) }
+    /** id ঋণাত্মক হলে এটা বাকি খরচ: পুরো বাকি-হিসাবটাই মোছা হয় */
+    fun deleteTxn(id: Long) = exec { if (id < 0) db.deleteDebt(-id) else db.deleteTxn(id) }
 
     fun transfer(fromId: Long, toId: Long, amount: Double) =
         exec { db.transfer(fromId, toId, amount) }
@@ -174,8 +175,16 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun addDebt(kind: String, person: String, note: String, splits: List<Pair<Long?, Double>>) =
-        exec { db.addDebt(kind, person, note, splits) }
+    fun addDebt(
+        kind: String,
+        person: String,
+        note: String,
+        splits: List<Pair<Long?, Double>>,
+        date: java.time.LocalDate,
+    ) = exec { db.addDebt(kind, person, note, splits, date) }
+
+    /** একটি ধার-হিসাবের সব এন্ট্রি (শুধু দেখার জন্য) */
+    fun debtEntries(id: Long): List<HistoryItem> = db.debtEntries(id)
 
     /** একাধিক অ্যাকাউন্টে ভাগ করা লেনদেন */
     fun addTxns(
