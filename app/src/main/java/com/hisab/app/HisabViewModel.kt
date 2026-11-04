@@ -13,6 +13,7 @@ import com.hisab.app.data.MonthItem
 import com.hisab.app.data.Debt
 import com.hisab.app.data.HisabDb
 import com.hisab.app.data.Kind
+import com.hisab.app.data.OTHER_ACCOUNT
 import com.hisab.app.data.Txn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,6 +29,7 @@ data class Summary(
     val asset: Double = 0.0,
     val monthExpense: Double = 0.0,
     val monthBaki: Double = 0.0,
+    val other: Double = 0.0,
 )
 
 /**
@@ -88,7 +90,10 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
                 lent = owed(Kind.LENT),
                 shop = owed(Kind.SHOP),
                 dps = sum("dps"),
-                asset = accs.filter { it.type !in setOf("cash", "mobile", "bank", "dps") }.sumOf { it.balance },
+                asset = accs
+                    .filter { it.type !in setOf("cash", "mobile", "bank", "dps") && it.name != OTHER_ACCOUNT }
+                    .sumOf { it.balance },
+                other = accs.filter { it.name == OTHER_ACCOUNT }.sumOf { it.balance },
                 monthExpense = month.sumOf { it.amount },
                 monthBaki = month.sumOf { it.remaining },
             ),
