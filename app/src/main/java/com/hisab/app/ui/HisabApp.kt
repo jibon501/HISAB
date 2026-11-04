@@ -2,6 +2,8 @@ package com.hisab.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -18,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -47,6 +50,8 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
     }
 
     Scaffold(
+        // ফোনের স্ট্যাটাস বারের জায়গা সিস্টেম নিজেই ছাড়ে; এখানে আবার যোগ করলে উপরে দ্বিগুণ ফাঁকা হয়
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
                 TABS.forEachIndexed { i, t ->
@@ -65,8 +70,10 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
             state = pager,
             modifier = Modifier.padding(pad),
             beyondViewportPageCount = TABS.size,
+            // পেজ ছোট হলে পেজার ডিফল্টভাবে মাঝখানে বসায়; তাই উপরে বসাতে হয়
+            verticalAlignment = Alignment.Top,
         ) { page ->
-            Box {
+            Box(Modifier.fillMaxSize()) {
                 when (page) {
                     0 -> DashboardScreen(vm)
                     1 -> TransactionsScreen(vm)

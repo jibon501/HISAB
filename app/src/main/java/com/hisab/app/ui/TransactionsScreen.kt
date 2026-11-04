@@ -5,6 +5,7 @@ package com.hisab.app.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -72,8 +73,11 @@ fun TransactionsScreen(vm: HisabViewModel) {
     var toDelete by remember { mutableStateOf<Txn?>(null) }
 
     Scaffold(
+        // উপরের স্ট্যাটাস বারের জায়গা আলাদা করে যোগ করা হয় না (নইলে দ্বিগুণ ফাঁকা হয়)
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(vm.filter ?: "") },
                 actions = {
                     IconButton(onClick = { showCats = true }) {
