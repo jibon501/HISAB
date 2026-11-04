@@ -12,9 +12,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Landscape
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -41,15 +44,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Kind
+import com.hisab.app.data.OTHER_ACCOUNT
 import com.hisab.app.data.fmtDate
 
 /** কোন কার্ডে ট্যাপ করা হয়েছে */
 private enum class Detail {
-    CASH, LENT, LOAN, EXPENSE, DPS, ASSET
+    CASH, LENT, LOAN, EXPENSE, DPS, ASSET, OTHER
 }
 
 /** তালিকার একটি সারি। kind থাকলে (দেনা-পাওনা) নামে ট্যাপ করে এডিট করা যায় */
@@ -79,6 +84,10 @@ fun DashboardScreen(vm: HisabViewModel) {
         item { SummaryCard("এই মাসের খরচ", s.monthExpense, Color(0xFF8E24AA), Icons.Default.ShoppingCart) { detail = Detail.EXPENSE } }
         item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
         item { SummaryCard("সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
+        // "অন্যান্য" অ্যাকাউন্টের ব্যালেন্স ০ হলে কার্ডটি দেখানো হয় না
+        if (s.other != 0.0) {
+            item { SummaryCard("অন্যান্য", s.other, Color(0xFF546E7A), Icons.Default.MoreHoriz) { detail = Detail.OTHER } }
+        }
     }
 
     detail?.let { d ->
@@ -120,7 +129,10 @@ private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
         Detail.LENT -> owed(Kind.LENT)
         Detail.DPS -> accounts("dps")
         Detail.ASSET -> vm.accounts
-            .filter { it.type !in ASSET_EXCLUDED_TYPES && it.balance != 0.0 }
+            .filter { it.type !in ASSET_EXCLUDED_TYPES && it.name != OTHER_ACCOUNT && it.balance != 0.0 }
+            .map { DRow(it.name, it.balance) }
+        Detail.OTHER -> vm.accounts
+            .filter { it.name == OTHER_ACCOUNT && it.balance != 0.0 }
             .map { DRow(it.name, it.balance) }
         Detail.EXPENSE -> vm.monthExpenses.map {
             DRow(
@@ -282,32 +294,64 @@ private fun PayBakiDialog(vm: HisabViewModel, debtId: Long, onDone: () -> Unit) 
     }
     var acc by remember(debtId) { mutableStateOf<com.hisab.app.data.Account?>(null) }
 
-    FormDialog(
-        title = "বাকি পরিশোধ",
-        confirmText = "পরিশোধ",
-        onDismiss = onDone,
-        onConfirm = {
-            val a = amount.toDoubleOrNull()
-            val ac = acc
-            when {
-                a == null || a <= 0 -> ctx.toast("সঠিক পরিমাণ দিন")
-                a > debt.remaining -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
-                ac == null -> ctx.toast("অ্যাকাউন্ট সিলেক্ট করুন")
-                else -> {
-                    vm.pay(debt, a, ac.id)
-                    onDone()
+    var confirmDelete by remember(debtId) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("বাকি পরিশোধ") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("${debt.person} • বাকি ${tk(debt.remaining)}")
+                MoneyField(amount, { amount = it }, "কত টাকা দিচ্ছেন")
+                Picker(
+                    label = "অ্যাকাউন্ট থেকে কাটবে",
+                    options = vm.accounts.withMoney(),
+                    selected = acc,
+                    text = { "${it.name} (${tk(it.balance)})" },
+                ) { acc = it }
+            }
+        },
+        // বাটন: পরিশোধ, বাতিল, মুছুন (ভুল বা পুরনো বাকি খরচ মুছে ফেলার জন্য)
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = {
+                    val a = amount.toDoubleOrNull()
+                    val ac = acc
+                    when {
+                        a == null || a <= 0 -> ctx.toast("সঠিক পরিমাণ দিন")
+                        a > debt.remaining -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
+                        ac == null -> ctx.toast("অ্যাকাউন্ট সিলেক্ট করুন")
+                        else -> {
+                            vm.pay(debt, a, ac.id)
+                            onDone()
+                        }
+                    }
+                }) { Text("পরিশোধ") }
+                TextButton(onClick = onDone) { Text("বাতিল") }
+                TextButton(onClick = { confirmDelete = true }) {
+                    Text("মুছুন", color = MaterialTheme.colorScheme.error)
                 }
             }
         },
-    ) {
-        Text("${debt.person} • বাকি ${tk(debt.remaining)}")
-        MoneyField(amount, { amount = it }, "কত টাকা দিচ্ছেন")
-        Picker(
-            label = "কোন অ্যাকাউন্ট থেকে কাটবে",
-            options = vm.accounts.withMoney(),
-            selected = acc,
-            text = { "${it.name} (${tk(it.balance)})" },
-        ) { acc = it }
+    )
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("\"${debt.person}\" মুছবেন?") },
+            text = { Text("এই বাকি খরচ মাসের খরচ থেকে বাদ যাবে এবং এর আগের পরিশোধের লেনদেনও মুছে অ্যাকাউন্টের ব্যালেন্স আগের অবস্থায় ফিরবে।") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    vm.deleteDebt(debt.id)
+                    onDone()
+                }) { Text("মুছুন", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("বাতিল") } },
+        )
     }
 }
 
@@ -324,16 +368,22 @@ private fun SummaryCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.14f)),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        // আইকন ও লেখা কার্ডের মাঝখানে
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(if (big) 40.dp else 30.dp))
             Spacer(Modifier.width(14.dp))
-            Column {
-                Text(title, fontSize = 14.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(title, fontSize = 14.sp, textAlign = TextAlign.Center)
                 Text(
                     tk(value),
                     fontSize = if (big) 28.sp else 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = color,
+                    textAlign = TextAlign.Center,
                 )
             }
         }

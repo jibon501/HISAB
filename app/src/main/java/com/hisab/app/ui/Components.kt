@@ -48,8 +48,9 @@ val TYPE_LABELS = linkedMapOf(
     "other" to "অন্যান্য",
 )
 
-/** টাকা বেরিয়ে যাওয়ার কাজে শুধু যে অ্যাকাউন্টে টাকা আছে (ব্যালেন্স ০ বা কম হলে বাদ) */
-fun List<com.hisab.app.data.Account>.withMoney() = filter { it.balance > 0.0 }
+/** টাকা বেরিয়ে যাওয়ার কাজে শুধু যে অ্যাকাউন্টে টাকা আছে (ব্যালেন্স ০ বা কম হলে বাদ; "অন্যান্য" ছাড়া) */
+fun List<com.hisab.app.data.Account>.withMoney() =
+    filter { it.balance > 0.0 || it.name == com.hisab.app.data.OTHER_ACCOUNT } // "অন্যান্য" সবসময় বাছা যায়
 
 /** নিজে যোগ করা ধরনের নামই ধরনের মান; বাকি ধরনের জন্য উপরের তালিকার নাম */
 fun typeLabel(type: String): String = TYPE_LABELS[type] ?: type
@@ -98,6 +99,7 @@ fun <T> Picker(
     selected: T?,
     text: (T) -> String,
     fieldText: (T) -> String = text, // বন্ধ ঘরে যা দেখাবে (তালিকায় text দেখায়)
+    inside: Boolean = false, // true হলে লেখাটা ঘরের ভেতরে ফিকে লেখা হিসেবে থাকে, ঘর ফাঁকা দেখায়
     onSelect: (T) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -107,7 +109,8 @@ fun <T> Picker(
             singleLine = true,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = if (inside) null else ({ Text(label) }),
+            placeholder = if (inside) ({ Text(label) }) else null,
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
             // এন্টার চাপলে কার্সার এই ঘর বাদ দিয়ে পরের লেখার ঘরে যায়
             modifier = Modifier.fillMaxWidth().focusProperties { canFocus = false },
@@ -136,12 +139,13 @@ fun MoneyField(value: String, onChange: (String) -> Unit) {
 
 /** কাস্টম লেবেলসহ: MoneyField(x, { x = it }, "লেবেল") */
 @Composable
-fun MoneyField(value: String, onChange: (String) -> Unit, label: String) {
+fun MoneyField(value: String, onChange: (String) -> Unit, label: String, inside: Boolean = false) {
     val focus = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) onChange(s) },
-        label = { Text(label) },
+        label = if (inside) null else ({ Text(label) }),
+        placeholder = if (inside) ({ Text(label) }) else null,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
         keyboardActions = KeyboardActions(onNext = { moveNext(focus) }),

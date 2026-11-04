@@ -52,6 +52,7 @@ fun SplitLines(
                         selected = line.acc,
                         text = { "${it.name} (${tk(it.balance)})" },
                         fieldText = { it.name },
+                        inside = true,
                     ) { sel -> onChange(lines.toMutableList().also { it[i] = line.copy(acc = sel) }) }
                 }
                 Box(Modifier.weight(1f)) {
@@ -59,6 +60,7 @@ fun SplitLines(
                         value = line.amount,
                         onChange = { v -> onChange(lines.toMutableList().also { it[i] = line.copy(amount = v) }) },
                         label = "টাকা",
+                        inside = true,
                     )
                 }
                 if (lines.size > 1) {

@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import com.hisab.app.HisabViewModel
+import com.hisab.app.data.OTHER_ACCOUNT
 import com.hisab.app.data.Account
 
 /** অ্যাকাউন্ট ও সম্পদের তালিকা। অ্যাকাউন্টে ট্যাপ করলে নাম বদল বা মোছা যায় */
@@ -75,7 +76,8 @@ fun AccountsScreen(vm: HisabViewModel) {
                     }
                     items(group, key = { it.id }) { a ->
                         ListItem(
-                            modifier = Modifier.clickable { editing = a },
+                            // ডিফল্ট "অন্যান্য" অ্যাকাউন্ট মোছা বা নাম বদল করা যায় না
+                            modifier = if (a.name == OTHER_ACCOUNT) Modifier else Modifier.clickable { editing = a },
                             leadingContent = { AccountAvatar(a) },
                             headlineContent = { Text(a.name) },
                             trailingContent = {
