@@ -134,7 +134,7 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
 
 /**
  * হিসাবে চাপলে শুধু দেখার বক্স: নাম, প্রতিটি এন্ট্রি, বাকি।
- * নিচের বাটন: "+", শেয়ার, মুছুন। "+" চাপলে পুরো স্ক্রিনের ফর্ম আসে (নাম বদল ও ফেরতের লাইন),
+ * নিচের বাটন: "+", শেয়ার, মুছুন। "+" চাপলে ছোট ফর্ম খোলে (নাম বদল ও ফেরতের লাইন),
  * সেখানে নিচে "সংরক্ষণ" ও "বাতিল"।
  */
 @Composable
@@ -211,7 +211,7 @@ private fun DebtEditDialog(
     }
 }
 
-/** "+" চাপলে পুরো স্ক্রিনের ফর্ম: নাম বদল ও ফেরতের লাইন; নিচে "সংরক্ষণ" ও "বাতিল" */
+/** "+" চাপলে ছোট ফর্ম ডায়ালগ: নাম বদল ও ফেরতের লাইন; নিচে "সংরক্ষণ" ও "বাতিল" */
 @Composable
 private fun DebtAddScreen(
     debt: Debt,
@@ -225,54 +225,31 @@ private fun DebtAddScreen(
     var name by remember(debt.id) { mutableStateOf(debt.person) }
     var lines by remember(debt.id) { mutableStateOf(listOf(SplitLine())) }
 
-    Dialog(
-        onDismissRequest = onCancel,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        // ফর্মের বক্সগুলোর লেখা-কাটা অংশের রঙ মেলাতে surfaceContainerHigh
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
-                Column(
-                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    TextInput(name, { name = it }, "নাম")
-                    if (!done) {
-                        Text(
-                            repayLabel(debt.kind),
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        SplitLines(
-                            accounts = accounts,
-                            lines = lines,
-                            onChange = { lines = it },
-                            accountLabel = if (lent) "অ্যাকাউন্টে জমা হবে" else "অ্যাকাউন্ট থেকে কাটবে",
-                        )
-                    }
-                }
-                HorizontalDivider()
-                Row(
-                    Modifier.fillMaxWidth().padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            val n = name.trim()
-                            val splits = lines.splits()
-                            val total = splits.sumOf { it.second }
-                            when {
-                                n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
-                                splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
-                                total > debt.remaining + 0.0001 -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
-                                else -> onSave(n, splits.map { (it.first as Account).id to it.second })
-                            }
-                        },
-                    ) { Text("সংরক্ষণ") }
-                    OutlinedButton(modifier = Modifier.weight(1f), onClick = onCancel) { Text("বাতিল") }
-                }
+    FormDialog(
+        title = repayLabel(debt.kind),
+        centerTitle = true,
+        confirmText = "সংরক্ষণ",
+        onDismiss = onCancel,
+        onConfirm = {
+            val n = name.trim()
+            val splits = lines.splits()
+            val total = splits.sumOf { it.second }
+            when {
+                n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
+                splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
+                total > debt.remaining + 0.0001 -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
+                else -> onSave(n, splits.map { (it.first as Account).id to it.second })
             }
+        },
+    ) {
+        TextInput(name, { name = it }, "নাম")
+        if (!done) {
+            SplitLines(
+                accounts = accounts,
+                lines = lines,
+                onChange = { lines = it },
+                accountLabel = if (lent) "অ্যাকাউন্টে জমা হবে" else "অ্যাকাউন্ট থেকে কাটবে",
+            )
         }
     }
 }
