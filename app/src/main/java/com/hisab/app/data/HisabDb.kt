@@ -68,11 +68,11 @@ object Kind {
     const val SHOP = "shop" // দোকান বাকি
 }
 
-/** ধার-হিসাবের প্রথম এন্ট্রির লেবেল: দিলে "দিছি", নিলে "নিছি" */
-fun debtLabel(kind: String): String = if (kind == Kind.LENT) "দিছি" else "নিছি"
+/** ধার-হিসাবের প্রথম এন্ট্রির লেবেল */
+fun debtLabel(kind: String): String = if (kind == Kind.LENT) "ধার দিয়েছি" else "ধার নিয়েছি"
 
 /** ফেরত/পরিশোধ এন্ট্রির লেবেল */
-fun repayLabel(kind: String): String = if (kind == Kind.LENT) "ফেরত দিছি" else "ফেরত নিয়েছি"
+fun repayLabel(kind: String): String = if (kind == Kind.LENT) "ফেরত নিছি" else "ফেরত দিয়েছি"
 
 /**
  * SQLite ডাটাবেস (ফোনেই থাকে, ইন্টারনেট লাগে না)।
