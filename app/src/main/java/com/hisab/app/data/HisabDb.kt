@@ -81,8 +81,9 @@ fun repayLabel(kind: String): String = if (kind == Kind.LENT) "ফেরত ন�
  * ভার্সন ২: অ্যাকাউন্টে আইকন কলাম যোগ হয়েছে।
  * ভার্সন ৩: খাত টেবিল, বাকি-খরচ (debts.is_expense) এবং IFIC BANK নাম।
  * ভার্সন ৪: সম্পদের অধীনে ডিফল্ট "অন্যান্য" অ্যাকাউন্ট; অ্যাকাউন্ট ছাড়া লেনদেন এতেই জমা হয়।
+ * ভার্সন ৫: খাতের নাম "ধার প্রদান" → "ধার দিছি", "লোন গ্রহণ" → "ধার নিছি"।
  */
-class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4) {
+class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -139,6 +140,13 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
             val id = otherAccountId(db)
             db.execSQL("UPDATE txns SET account_id = ? WHERE account_id = 0", arrayOf<Any>(id))
         }
+        if (oldVersion < 5) renameDebtCategories(db)
+    }
+
+    /** পুরনো খাতের নাম নতুন নামে বদলায় (আগের লেনদেন ও পুরনো এক্সেল ব্যাকআপ, দুইয়ের জন্যই) */
+    private fun renameDebtCategories(db: SQLiteDatabase) {
+        db.execSQL("UPDATE txns SET category = 'ধার দিছি' WHERE category = 'ধার প্রদান'")
+        db.execSQL("UPDATE txns SET category = 'ধার নিছি' WHERE category = 'লোন গ্রহণ'")
     }
 
     /** ডিফল্ট "অন্যান্য" অ্যাকাউন্টের আইডি; না থাকলে (মোছা হলে) নতুন করে বানায় */
@@ -527,7 +535,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
                             type = if (kind == Kind.LOAN) "credit" else "debit",
                             amount = amount,
                             accountId = accountId,
-                            category = if (kind == Kind.LOAN) "লোন গ্রহণ" else "ধার প্রদান",
+                            category = if (kind == Kind.LOAN) "ধার নিছি" else "ধার দিছি",
                             note = person,
                             debtId = debtId,
                             date = at,
@@ -713,6 +721,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
                     insertOrThrow(table, null, v)
                 }
             }
+            renameDebtCategories(this)
         }
     }
 }
