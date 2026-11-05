@@ -350,8 +350,6 @@ private fun AddTxnDialog(
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TypeButton("খরচ", type == "debit", Modifier.weight(1f)) { pick("debit") }
             TypeButton("আয়", type == "credit", Modifier.weight(1f)) { pick("credit") }
-            TypeButton("দিছি", type == "lent", Modifier.weight(1f)) { pick("lent") }
-            TypeButton("নিছি", type == "loan", Modifier.weight(1f)) { pick("loan") }
         }
 
         if (isDebt) {

@@ -42,16 +42,18 @@ fun DebtTable(person: String, entries: List<HistoryItem>) {
             Text("পরিমাণ", Modifier.weight(amountW), fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.End)
         }
         entries.forEach { h ->
+            // ফেরত/পরিশোধের সারিতে তারিখ, ধরন ও পরিমাণ একই (সবুজ) রঙে
+            val c = if (h.payment) Color(0xFF2E7D32) else Color.Unspecified
             Row(Modifier.fillMaxWidth()) {
-                Text(fmtDate(h.date), Modifier.weight(dateW), fontSize = 13.sp)
-                Text(h.label, Modifier.weight(typeW), fontSize = 13.sp)
+                Text(fmtDate(h.date), Modifier.weight(dateW), fontSize = 13.sp, color = c)
+                Text(h.label, Modifier.weight(typeW), fontSize = 13.sp, color = c)
                 Text(
                     tk(h.amount),
                     Modifier.weight(amountW),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.End,
-                    color = if (h.payment) Color(0xFF2E7D32) else Color.Unspecified,
+                    color = c,
                 )
             }
         }

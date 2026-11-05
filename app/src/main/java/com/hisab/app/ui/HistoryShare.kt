@@ -43,9 +43,11 @@ fun buildHistoryBitmap(person: String, kindLabel: String, items: List<HistoryIte
     var remaining = 0.0
     items.forEach { h ->
         remaining += if (h.payment) -h.amount else h.amount
-        c.drawText(fmtDate(h.date), pad, y, sub)
-        c.drawText(h.label, pad + 190f, y, text)
-        val amountPaint = Paint(bold).apply { if (h.payment) color = Color.rgb(0x2E, 0x7D, 0x32) }
+        // ফেরত/পরিশোধের সারিতে তারিখ, ধরন ও পরিমাণ একই (সবুজ) রঙে
+        val green = Color.rgb(0x2E, 0x7D, 0x32)
+        c.drawText(fmtDate(h.date), pad, y, if (h.payment) Paint(sub).apply { color = green } else sub)
+        c.drawText(h.label, pad + 190f, y, if (h.payment) Paint(text).apply { color = green } else text)
+        val amountPaint = Paint(bold).apply { if (h.payment) color = green }
         val amt = tk(h.amount)
         c.drawText(amt, width - pad - amountPaint.measureText(amt), y, amountPaint)
         y += rowH
