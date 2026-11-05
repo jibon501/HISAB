@@ -68,6 +68,12 @@ object Kind {
     const val SHOP = "shop" // দোকান বাকি
 }
 
+/** ধার-হিসাবের প্রথম এন্ট্রির লেবেল: দিলে "দিছি", নিলে "নিছি" */
+fun debtLabel(kind: String): String = if (kind == Kind.LENT) "দিছি" else "নিছি"
+
+/** ফেরত/পরিশোধ এন্ট্রির লেবেল */
+fun repayLabel(kind: String): String = if (kind == Kind.LENT) "ফেরত দিছি" else "ফেরত নিয়েছি"
+
 /**
  * SQLite ডাটাবেস (ফোনেই থাকে, ইন্টারনেট লাগে না)।
  * সব লেনদেনে অ্যাকাউন্ট বাধ্যতামূলক, তাই ব্যালেন্স সবসময় মিলে যায়।
@@ -347,7 +353,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
     fun debtHistory(kind: String, person: String): List<HistoryItem> {
         val db = readableDatabase
         val out = mutableListOf<HistoryItem>()
-        val firstLabel = if (kind == Kind.LENT) "আমি দিয়েছি" else "আমি নিয়েছি"
+        val firstLabel = debtLabel(kind)
         db.rawQuery(
             "SELECT date, total FROM debts WHERE kind = ? AND person = ?",
             arrayOf(kind, person),
@@ -361,9 +367,58 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
             """.trimIndent(),
             arrayOf(kind, person),
         ).use { c ->
-            while (c.moveToNext()) out += HistoryItem(c.getString(0), "ফেরত", c.getDouble(1), true)
+            while (c.moveToNext()) out += HistoryItem(c.getString(0), repayLabel(kind), c.getDouble(1), true)
         }
         return out.sortedBy { it.date }
+    }
+
+    /** আগের তারিখ-সময়ের সময়টা রেখে শুধু দিনটা বদলায় (সাজানোর ক্রম ঠিক থাকে) */
+    private fun withDate(old: String?, date: LocalDate): String {
+        val time = runCatching { LocalDateTime.parse(old).toLocalTime() }.getOrDefault(java.time.LocalTime.now())
+        return LocalDateTime.of(date, time).toString()
+    }
+
+    /**
+     * লেনদেনের পরিমাণ ও তারিখ বদল। id ঋণাত্মক হলে বাকি খরচ।
+     * ট্রান্সফারের দুই দিকই বদলায়; ধারের মূল লেনদেন বদলালে ধারের মোট ও তারিখও মিলিয়ে দেওয়া হয়।
+     */
+    fun updateTxn(id: Long, amount: Double, date: LocalDate) {
+        writableDatabase.transaction<Unit> {
+            if (id < 0) {
+                val debtId = (-id).toString()
+                val old = rawQuery("SELECT date FROM debts WHERE id = ?", arrayOf(debtId)).use { c ->
+                    if (c.moveToFirst()) c.getString(0) else null
+                }
+                update(
+                    "debts",
+                    ContentValues().apply { put("total", amount); put("date", withDate(old, date)) },
+                    "id = ?", arrayOf(debtId),
+                )
+                return@transaction
+            }
+            val row = rawQuery(
+                "SELECT ref, debt_id, is_payment, date FROM txns WHERE id = ?", arrayOf(id.toString()),
+            ).use { c ->
+                if (c.moveToFirst()) arrayOf(c.getString(0), if (c.isNull(1)) null else c.getString(1), c.getString(2), c.getString(3)) else null
+            } ?: return@transaction
+            val ref = row[0]
+            val debtId = row[1]
+            val isPayment = row[2] == "1"
+            val v = ContentValues().apply { put("amount", amount); put("date", withDate(row[3], date)) }
+            if (ref != null) update("txns", v, "ref = ?", arrayOf(ref))
+            else update("txns", v, "id = ?", arrayOf(id.toString()))
+            if (debtId != null && !isPayment) {
+                // একাধিক অ্যাকাউন্টে ভাগ থাকলে ধারের মোট = সব ভাগের যোগফল
+                val total = rawQuery(
+                    "SELECT IFNULL(SUM(amount), 0) FROM txns WHERE debt_id = ? AND is_payment = 0", arrayOf(debtId),
+                ).use { c -> if (c.moveToFirst()) c.getDouble(0) else amount }
+                update(
+                    "debts",
+                    ContentValues().apply { put("total", total); put("date", withDate(row[3], date)) },
+                    "id = ?", arrayOf(debtId),
+                )
+            }
+        }
     }
 
     /** ট্রান্সফারের দুই দিকই একসাথে মুছে যায় (ref একই) */
@@ -487,17 +542,18 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 4)
     fun debtEntries(id: Long): List<HistoryItem> {
         val db = readableDatabase
         val out = mutableListOf<HistoryItem>()
+        var kind = Kind.LOAN
         db.rawQuery("SELECT kind, date, total FROM debts WHERE id = ?", arrayOf(id.toString())).use { c ->
             if (c.moveToFirst()) {
-                val label = if (c.getString(0) == Kind.LENT) "আমি দিয়েছি" else "আমি নিয়েছি"
-                out += HistoryItem(c.getString(1), label, c.getDouble(2), false)
+                kind = c.getString(0)
+                out += HistoryItem(c.getString(1), debtLabel(kind), c.getDouble(2), false)
             }
         }
         db.rawQuery(
             "SELECT date, amount FROM txns WHERE debt_id = ? AND is_payment = 1",
             arrayOf(id.toString()),
         ).use { c ->
-            while (c.moveToNext()) out += HistoryItem(c.getString(0), "ফেরত", c.getDouble(1), true)
+            while (c.moveToNext()) out += HistoryItem(c.getString(0), repayLabel(kind), c.getDouble(1), true)
         }
         return out.sortedBy { it.date }
     }

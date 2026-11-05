@@ -153,6 +153,9 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     /** id ঋণাত্মক হলে এটা বাকি খরচ: পুরো বাকি-হিসাবটাই মোছা হয় */
     fun deleteTxn(id: Long) = exec { if (id < 0) db.deleteDebt(-id) else db.deleteTxn(id) }
 
+    /** লেনদেনের পরিমাণ ও তারিখ এডিট (id ঋণাত্মক হলে বাকি খরচ) */
+    fun editTxn(id: Long, amount: Double, date: java.time.LocalDate) = exec { db.updateTxn(id, amount, date) }
+
     fun transfer(fromId: Long, toId: Long, amount: Double) =
         exec { db.transfer(fromId, toId, amount) }
 

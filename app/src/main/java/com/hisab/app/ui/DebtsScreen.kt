@@ -19,7 +19,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.systemBarsPadding
+import com.hisab.app.data.debtLabel
+import com.hisab.app.data.repayLabel
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -51,7 +59,7 @@ import com.hisab.app.data.Kind
 import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.fmtDate
 
-/** আমি দিয়েছি / আমি নিয়েছি: প্রতিটির আলাদা তালিকা। নতুন ধার যোগ হয় লেনদেনের নতুন ফর্ম থেকে */
+/** দিছি / নিছি: প্রতিটির আলাদা তালিকা। নতুন ধার যোগ হয় লেনদেনের নতুন ফর্ম থেকে */
 @Composable
 fun DebtsScreen(vm: HisabViewModel, kind: String) {
     var editTarget by remember { mutableStateOf<Debt?>(null) }
@@ -125,9 +133,9 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
 }
 
 /**
- * হিসাবে চাপলে প্রথমে শুধু দেখার বক্স: নাম, প্রতিটি এন্ট্রি, বাকি।
- * নিচের বাটন: সম্পাদনা, সংরক্ষণ, মুছুন। "সম্পাদনা" চাপলে নাম বদল ও ফেরত/পরিশোধের লাইন আসে,
- * তখন "সংরক্ষণ" চালু হয়।
+ * হিসাবে চাপলে শুধু দেখার বক্স: নাম, প্রতিটি এন্ট্রি, বাকি।
+ * নিচের বাটন: "+", শেয়ার, মুছুন। "+" চাপলে পুরো স্ক্রিনের ফর্ম আসে (নাম বদল ও ফেরতের লাইন),
+ * সেখানে নিচে "সংরক্ষণ" ও "বাতিল"।
  */
 @Composable
 private fun DebtEditDialog(
@@ -139,64 +147,54 @@ private fun DebtEditDialog(
     onDelete: () -> Unit,
 ) {
     val ctx = LocalContext.current
-    val lent = debt.kind == Kind.LENT
-    val done = debt.remaining <= 0.0
-    var editing by remember(debt.id) { mutableStateOf(false) }
-    var name by remember(debt.id) { mutableStateOf(debt.person) }
-    var lines by remember(debt.id) { mutableStateOf(listOf(SplitLine())) }
+    var adding by remember(debt.id) { mutableStateOf(false) }
     var confirmDelete by remember(debt.id) { mutableStateOf(false) }
+    // একবার সেভ হলে শেয়ারে একই ছবি ব্যবহার হয়, দুটো কপি হয় না
+    var savedUri by remember(debt.id) { mutableStateOf<android.net.Uri?>(null) }
+
+    fun share() {
+        val label = debtLabel(debt.kind)
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+            shareText(ctx, debt.person, label, entries)
+            return
+        }
+        val uri = savedUri ?: saveToGallery(
+            ctx,
+            buildHistoryBitmap(debt.person, label, entries),
+            "hisab_${debt.person}_${System.currentTimeMillis()}".replace(" ", "_"),
+        ).also { savedUri = it }
+        if (uri != null) shareImage(ctx, uri) else ctx.toast("শেয়ার করা গেল না")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (!editing) {
-                    // শুধু দেখার অবস্থা: নাম মাঝখানে, তিন কলাম, নিচে মোট
-                    DebtTable(debt.person, entries)
-                } else {
-                    TextInput(name, { name = it }, "নাম")
-                    if (!done) {
-                        Text(
-                            if (lent) "ফেরত পেলে" else "পরিশোধ করলে",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        SplitLines(
-                            accounts = accounts,
-                            lines = lines,
-                            onChange = { lines = it },
-                            accountLabel = if (lent) "অ্যাকাউন্টে জমা হবে" else "অ্যাকাউন্ট থেকে কাটবে",
-                        )
-                    }
-                }
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                // শুধু দেখার অবস্থা: নাম মাঝখানে, তিন কলাম, নিচে মোট
+                DebtTable(debt.person, entries)
             }
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { editing = true }, enabled = !editing) { Text("সম্পাদনা") }
-                TextButton(
-                    enabled = editing,
-                    onClick = {
-                        val n = name.trim()
-                        val splits = lines.splits()
-                        val total = splits.sumOf { it.second }
-                        when {
-                            n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
-                            splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
-                            total > debt.remaining + 0.0001 -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
-                            else -> onSave(n, splits.map { (it.first as Account).id to it.second })
-                        }
-                    },
-                ) { Text("সংরক্ষণ") }
+                TextButton(onClick = { adding = true }) {
+                    Text("+", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                }
+                TextButton(onClick = { share() }) { Text("শেয়ার") }
                 TextButton(onClick = { confirmDelete = true }) {
                     Text("মুছুন", color = MaterialTheme.colorScheme.error)
                 }
             }
         },
     )
+
+    if (adding) {
+        DebtAddScreen(
+            debt = debt,
+            accounts = accounts,
+            onCancel = { adding = false },
+            onSave = onSave,
+        )
+    }
 
     if (confirmDelete) {
         AlertDialog(
@@ -210,5 +208,71 @@ private fun DebtEditDialog(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("বাতিল") } },
         )
+    }
+}
+
+/** "+" চাপলে পুরো স্ক্রিনের ফর্ম: নাম বদল ও ফেরতের লাইন; নিচে "সংরক্ষণ" ও "বাতিল" */
+@Composable
+private fun DebtAddScreen(
+    debt: Debt,
+    accounts: List<Account>,
+    onCancel: () -> Unit,
+    onSave: (name: String, splits: List<Pair<Long, Double>>) -> Unit,
+) {
+    val ctx = LocalContext.current
+    val lent = debt.kind == Kind.LENT
+    val done = debt.remaining <= 0.0
+    var name by remember(debt.id) { mutableStateOf(debt.person) }
+    var lines by remember(debt.id) { mutableStateOf(listOf(SplitLine())) }
+
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        // ফর্মের বক্সগুলোর লেখা-কাটা অংশের রঙ মেলাতে surfaceContainerHigh
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TextInput(name, { name = it }, "নাম")
+                    if (!done) {
+                        Text(
+                            repayLabel(debt.kind),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        SplitLines(
+                            accounts = accounts,
+                            lines = lines,
+                            onChange = { lines = it },
+                            accountLabel = if (lent) "অ্যাকাউন্টে জমা হবে" else "অ্যাকাউন্ট থেকে কাটবে",
+                        )
+                    }
+                }
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Button(
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            val n = name.trim()
+                            val splits = lines.splits()
+                            val total = splits.sumOf { it.second }
+                            when {
+                                n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
+                                splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
+                                total > debt.remaining + 0.0001 -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
+                                else -> onSave(n, splits.map { (it.first as Account).id to it.second })
+                            }
+                        },
+                    ) { Text("সংরক্ষণ") }
+                    OutlinedButton(modifier = Modifier.weight(1f), onClick = onCancel) { Text("বাতিল") }
+                }
+            }
+        }
     }
 }

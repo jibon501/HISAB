@@ -79,8 +79,8 @@ fun DashboardScreen(vm: HisabViewModel) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { SummaryCard("ক্যাশ", s.cash, Color(0xFF00897B), Icons.Default.Payments, big = true) { detail = Detail.CASH } }
-        item { SummaryCard("আমি দিয়েছি", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
-        item { SummaryCard("আমি নিয়েছি", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
+        item { SummaryCard("ধার দেওয়া", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
+        item { SummaryCard("ধার নেওয়া", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
         item { SummaryCard("এই মাসের খরচ", s.monthExpense, Color(0xFF8E24AA), Icons.Default.ShoppingCart) { detail = Detail.EXPENSE } }
         item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
         item { SummaryCard("সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
@@ -210,23 +210,10 @@ private fun DetailDialog(
     )
 }
 
-/** একজনের ধার-হিসাব: কবে কত ধার নেওয়া/দেওয়া, কবে কত ফেরত (শুধু দেখার জন্য, এডিট নেই) */
+/** একজনের ধার-হিসাব: কবে কত ধার নেওয়া/দেওয়া, কবে কত ফেরত (শুধু দেখার জন্য, এডিট বা শেয়ার নেই) */
 @Composable
 private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, onDismiss: () -> Unit) {
-    val ctx = LocalContext.current
     val items = remember(kind, person, vm.debts) { vm.debtHistory(kind, person) }
-    val remaining = items.sumOf { if (it.payment) -it.amount else it.amount }
-    val kindLabel = if (kind == Kind.LENT) "আমি দিয়েছি" else "আমি নিয়েছি"
-    // একবার সেভ করা হলে শেয়ারে একই ছবি ব্যবহার হয়, দুটো কপি হয় না
-    var savedUri by remember(kind, person) { mutableStateOf<android.net.Uri?>(null) }
-
-    fun ensureSaved(): android.net.Uri? {
-        savedUri?.let { return it }
-        val bmp = buildHistoryBitmap(person, kindLabel, items)
-        val uri = saveToGallery(ctx, bmp, "hisab_${person}_${System.currentTimeMillis()}".replace(" ", "_"))
-        savedUri = uri
-        return uri
-    }
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
@@ -234,28 +221,8 @@ private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, 
                 DebtTable(person, items)
             }
         },
-        // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = {
-                    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-                        ctx.toast("এই ফোনে গ্যালারিতে সেভ চলে না, শেয়ার ব্যবহার করুন")
-                    } else if (ensureSaved() != null) {
-                        ctx.toast("গ্যালারিতে সেভ হয়েছে")
-                    } else {
-                        ctx.toast("সেভ করা গেল না")
-                    }
-                }) { Text("গ্যালারিতে সেভ") }
-                TextButton(onClick = {
-                    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-                        shareText(ctx, person, kindLabel, items)
-                    } else {
-                        val uri = ensureSaved()
-                        if (uri != null) shareImage(ctx, uri) else ctx.toast("শেয়ার করা গেল না")
-                    }
-                }) { Text("শেয়ার") }
-            }
-        },
+        // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়, আলাদা বাটন নেই
+        confirmButton = {},
     )
 }
 
