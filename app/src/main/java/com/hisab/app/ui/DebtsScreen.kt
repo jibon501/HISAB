@@ -13,7 +13,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -59,11 +63,22 @@ import com.hisab.app.data.Kind
 import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.fmtDate
 
+/** একই ব্যক্তির সব ধার/দেওয়া এক সারিতে (লেনদেন ট্যাবে এগুলো আলাদাই থাকে) */
+private class DebtGroup(val person: String, val kind: String, val debts: List<Debt>) {
+    val remaining get() = debts.sumOf { it.remaining }
+    val date get() = debts.maxOf { it.date } // সবচেয়ে নতুন তারিখ
+
+    /** ডায়ালগের জন্য একটি মিলিত হিসাব */
+    fun merged() = Debt(debts.maxOf { it.id }, kind, person, debts.sumOf { it.total }, remaining, date)
+}
+
 /** দিছি / নিছি: প্রতিটির আলাদা তালিকা। নতুন ধার যোগ হয় লেনদেনের নতুন ফর্ম থেকে */
 @Composable
 fun DebtsScreen(vm: HisabViewModel, kind: String) {
-    var editTarget by remember { mutableStateOf<Debt?>(null) }
+    var editPerson by remember(kind) { mutableStateOf<String?>(null) }
     val list = vm.debts[kind].orEmpty()
+    // তালিকা নতুন আগে সাজানো; groupBy প্রথম আসার ক্রম রাখে
+    val groups = list.groupBy { it.person }.map { (p, ds) -> DebtGroup(p, kind, ds) }
 
     Scaffold(
         // উপরের অংশের জায়গা বাইরের কাঠামোই ধরে, তাই এখানে আলাদা ইনসেট নেই
@@ -73,31 +88,37 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
             if (list.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("কোনো হিসাব নেই") }
             } else {
-                // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি (+) বাটন ও মোটের নিচে ঢাকা না পড়ে
-                LazyColumn(
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(list, key = { it.id }) { d ->
-                        val done = d.remaining <= 0.0
-                        // প্রতিটি হিসাব আলাদা হালকা গাঢ় বক্সে
-                        Card(
-                            modifier = Modifier.fillMaxWidth().clickable { editTarget = d },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                            ),
+                // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি মোটের নিচে ঢাকা না পড়ে
+                LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                    itemsIndexed(groups, key = { _, g -> g.person }) { i, g ->
+                        val done = g.remaining <= 0.0
+                        // এক লাইন পর পর হালকা ধূসর বক্স; বক্স লেখার চেয়ে সামান্য বড়
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (i % 2 == 1) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                    else Color.Transparent
+                                )
+                                .clickable { editPerson = g.person }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            ListItem(
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                // "তারিখ > নাম" (মোট টাকার উল্লেখ নেই)
-                                headlineContent = { Text("${fmtDate(d.date)} > ${d.person}") },
-                                trailingContent = {
-                                    Text(
-                                        if (done) "পরিশোধিত ✓" else tk(d.remaining),
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
-                                    )
+                            // "তারিখ নাম": তারিখ ছোট ও ধূসর
+                            Text(
+                                buildAnnotatedString {
+                                    withStyle(SpanStyle(fontSize = 11.sp, color = Color.Gray)) { append(fmtDate(g.date)) }
+                                    append("  ")
+                                    append(g.person)
                                 },
+                                modifier = Modifier.weight(1f),
+                                fontSize = 15.sp,
+                            )
+                            Text(
+                                if (done) "পরিশোধিত ✓" else tk(g.remaining),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
                             )
                         }
                     }
@@ -113,20 +134,20 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
         }
     }
 
-    editTarget?.let { d ->
+    groups.firstOrNull { it.person == editPerson }?.let { g ->
         DebtEditDialog(
-            debt = d,
-            entries = vm.debtEntries(d.id),
+            debt = g.merged(),
+            entries = vm.debtHistory(g.kind, g.person),
             // ধার পরিশোধে টাকা বেরিয়ে যায়, ধার ফেরত পেলে টাকা ঢোকে
-            accounts = if (d.kind == Kind.LOAN) vm.accounts.withMoney() else vm.accounts,
-            onDismiss = { editTarget = null },
+            accounts = if (g.kind == Kind.LOAN) vm.accounts.withMoney() else vm.accounts,
+            onDismiss = { editPerson = null },
             onSave = { name, splits ->
-                vm.saveDebtEdit(d, name, splits)
-                editTarget = null
+                vm.saveGroupEdit(g.kind, g.person, name, g.debts, splits)
+                editPerson = null
             },
             onDelete = {
-                vm.deleteDebt(d.id)
-                editTarget = null
+                vm.deleteDebts(g.debts.map { it.id })
+                editPerson = null
             },
         )
     }
