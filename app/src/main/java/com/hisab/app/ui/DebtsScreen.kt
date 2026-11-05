@@ -89,8 +89,8 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
                         ) {
                             ListItem(
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(d.person) },
-                                supportingContent = { Text("মোট ${tk(d.total)} • ${fmtDate(d.date)}") },
+                                // "তারিখ > নাম" (মোট টাকার উল্লেখ নেই)
+                                headlineContent = { Text("${fmtDate(d.date)} > ${d.person}") },
                                 trailingContent = {
                                     Text(
                                         if (done) "পরিশোধিত ✓" else tk(d.remaining),
