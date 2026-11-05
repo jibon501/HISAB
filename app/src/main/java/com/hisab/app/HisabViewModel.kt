@@ -206,6 +206,29 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteDebt(id: Long) = exec { db.deleteDebt(id) }
 
+    fun deleteDebts(ids: List<Long>) = exec { ids.forEach { db.deleteDebt(it) } }
+
+    /**
+     * একই ব্যক্তির সব হিসাবের এডিট: নাম বদল + ফেরত/পরিশোধ।
+     * টাকা পুরনো হিসাব থেকে আগে বাদ যায় (একটি পুরো শোধ হলে পরেরটিতে)।
+     */
+    fun saveGroupEdit(kind: String, oldName: String, newName: String, debts: List<Debt>, splits: List<Pair<Long, Double>>) = exec {
+        if (newName != oldName) db.renameDebtPerson(kind, oldName, newName)
+        val left = debts.sortedBy { it.id }.map { it.copy(person = newName) to it.remaining }.toMutableList()
+        splits.forEach { (accId, amount) ->
+            var rest = amount
+            for (i in left.indices) {
+                if (rest <= 0.0001) break
+                val (d, rem) = left[i]
+                if (rem <= 0.0001) continue
+                val part = minOf(rest, rem)
+                db.pay(d, part, accId)
+                left[i] = d to (rem - part)
+                rest -= part
+            }
+        }
+    }
+
     /** সব ডেটা xlsx আকারে লেখে। শেষে done(সফল হয়েছে কি না) */
     fun exportXlsx(out: java.io.OutputStream, done: (Boolean) -> Unit) {
         viewModelScope.launch {
