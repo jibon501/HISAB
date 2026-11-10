@@ -77,7 +77,6 @@ private val RED = Color(0xFFC62828)
 @Composable
 fun TransactionsScreen(vm: HisabViewModel) {
     var showAdd by remember { mutableStateOf(false) }
-    var showTransfer by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var showCats by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<Txn?>(null) }
@@ -93,9 +92,6 @@ fun TransactionsScreen(vm: HisabViewModel) {
                 actions = {
                     IconButton(onClick = { showCats = true }) {
                         Icon(Icons.Default.Category, contentDescription = "খাত")
-                    }
-                    IconButton(onClick = { showTransfer = true }) {
-                        Icon(Icons.Default.CompareArrows, contentDescription = "ট্রান্সফার")
                     }
                     Box {
                         IconButton(onClick = { menu = true }) {
@@ -179,16 +175,6 @@ fun TransactionsScreen(vm: HisabViewModel) {
             onRename = { id, name -> vm.renameCategory(id, name) },
             onDelete = { id -> vm.deleteCategory(id) },
             onDismiss = { showCats = false },
-        )
-    }
-    if (showTransfer) {
-        TransferDialog(
-            accounts = vm.accounts,
-            onDismiss = { showTransfer = false },
-            onSave = { from, to, amount ->
-                vm.transfer(from, to, amount)
-                showTransfer = false
-            },
         )
     }
     toEdit?.let { t ->
@@ -499,38 +485,5 @@ private fun EditTxnDialog(txn: Txn, onDismiss: () -> Unit, onSave: (amount: Doub
         ) {
             DatePicker(state = state)
         }
-    }
-}
-
-@Composable
-private fun TransferDialog(
-    accounts: List<Account>,
-    onDismiss: () -> Unit,
-    onSave: (from: Long, to: Long, amount: Double) -> Unit,
-) {
-    val ctx = LocalContext.current
-    var from by remember { mutableStateOf<Account?>(null) }
-    var to by remember { mutableStateOf<Account?>(null) }
-    var amount by remember { mutableStateOf("") }
-
-    FormDialog(
-        title = "ট্রান্সফার (যেমন: ব্যাংক থেকে DPS)",
-        confirmText = "ট্রান্সফার",
-        onDismiss = onDismiss,
-        onConfirm = {
-            val a = amount.toDoubleOrNull()
-            val f = from
-            val t = to
-            if (a == null || a <= 0 || f == null || t == null || f.id == t.id) {
-                ctx.toast("সঠিক তথ্য দিন (দুটি আলাদা অ্যাকাউন্ট লাগবে)")
-            } else {
-                onSave(f.id, t.id, a)
-            }
-        },
-    ) {
-        val label: (Account) -> String = { "${it.name} (${tk(it.balance)})" }
-        Picker("যে অ্যাকাউন্ট থেকে", accounts.withMoney(), from, label) { from = it }
-        Picker("যে অ্যাকাউন্টে", accounts, to, label) { to = it }
-        MoneyField(amount) { amount = it }
     }
 }

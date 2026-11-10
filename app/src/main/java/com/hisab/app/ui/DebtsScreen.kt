@@ -24,6 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.SelectableDates
@@ -80,9 +83,35 @@ private class DebtGroup(val person: String, val kind: String, val debts: List<De
     fun merged() = Debt(debts.maxOf { it.id }, kind, person, debts.sumOf { it.total }, remaining, date)
 }
 
-/** দিছি / নিছি: প্রতিটির আলাদা তালিকা। নতুন ধার যোগ হয় লেনদেনের নতুন ফর্ম থেকে */
+/** একটি "ধার" ট্যাব: উপরে দিছি | নিছি বাছাই, নিচে সেটার তালিকা। ভাসমান "+" বাছা ধরনে নতুন ধার যোগ করে */
 @Composable
-fun DebtsScreen(vm: HisabViewModel, kind: String) {
+fun DebtsScreen(vm: HisabViewModel) {
+    var kind by rememberSaveable { mutableStateOf(Kind.LENT) }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = kind == Kind.LENT,
+                onClick = { kind = Kind.LENT },
+                label = { Text("দিছি", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                modifier = Modifier.weight(1f),
+            )
+            FilterChip(
+                selected = kind == Kind.LOAN,
+                onClick = { kind = Kind.LOAN },
+                label = { Text("নিছি", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Box(Modifier.weight(1f)) { DebtsPane(vm, kind) }
+    }
+}
+
+/** বাছা ধরনের (দিছি / নিছি) তালিকা। নতুন ধার যোগ হয় ভাসমান "+" থেকে */
+@Composable
+private fun DebtsPane(vm: HisabViewModel, kind: String) {
     var editPerson by remember(kind) { mutableStateOf<String?>(null) }
     var showAdd by remember(kind) { mutableStateOf(false) }
     val list = vm.debts[kind].orEmpty()

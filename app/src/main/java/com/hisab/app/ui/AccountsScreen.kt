@@ -16,6 +16,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +47,7 @@ import com.hisab.app.data.Account
 fun AccountsScreen(vm: HisabViewModel) {
     val ctx = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
+    var showTransfer by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Account?>(null) }
     var deleting by remember { mutableStateOf<Account?>(null) }
 
@@ -54,9 +58,15 @@ fun AccountsScreen(vm: HisabViewModel) {
     Scaffold(
         // উপরের অংশের জায়গা বাইরের কাঠামোই ধরে, তাই এখানে আলাদা ইনসেট নেই
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        // ভাসমান বাটন: উপরে ট্রান্সফার (ছোট), নিচে নতুন অ্যাকাউন্ট (+)
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "নতুন অ্যাকাউন্ট")
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SmallFloatingActionButton(onClick = { showTransfer = true }) {
+                    Icon(Icons.Default.CompareArrows, contentDescription = "ট্রান্সফার")
+                }
+                FloatingActionButton(onClick = { showAdd = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "নতুন অ্যাকাউন্ট")
+                }
             }
         },
     ) { pad ->
@@ -97,6 +107,17 @@ fun AccountsScreen(vm: HisabViewModel) {
             onSave = { name, type, opening, icon ->
                 vm.addAccount(name, type, opening, icon)
                 showAdd = false
+            },
+        )
+    }
+
+    if (showTransfer) {
+        TransferDialog(
+            accounts = vm.accounts,
+            onDismiss = { showTransfer = false },
+            onSave = { from, to, amount ->
+                vm.transfer(from, to, amount)
+                showTransfer = false
             },
         )
     }
@@ -214,4 +235,37 @@ private fun EditAccountDialog(
             }
         },
     )
+}
+
+@Composable
+private fun TransferDialog(
+    accounts: List<Account>,
+    onDismiss: () -> Unit,
+    onSave: (from: Long, to: Long, amount: Double) -> Unit,
+) {
+    val ctx = LocalContext.current
+    var from by remember { mutableStateOf<Account?>(null) }
+    var to by remember { mutableStateOf<Account?>(null) }
+    var amount by remember { mutableStateOf("") }
+
+    FormDialog(
+        title = "ট্রান্সফার (যেমন: ব্যাংক থেকে DPS)",
+        confirmText = "ট্রান্সফার",
+        onDismiss = onDismiss,
+        onConfirm = {
+            val a = amount.toDoubleOrNull()
+            val f = from
+            val t = to
+            if (a == null || a <= 0 || f == null || t == null || f.id == t.id) {
+                ctx.toast("সঠিক তথ্য দিন (দুটি আলাদা অ্যাকাউন্ট লাগবে)")
+            } else {
+                onSave(f.id, t.id, a)
+            }
+        },
+    ) {
+        val label: (Account) -> String = { "${it.name} (${tk(it.balance)})" }
+        Picker("যে অ্যাকাউন্ট থেকে", accounts.withMoney(), from, label) { from = it }
+        Picker("যে অ্যাকাউন্টে", accounts, to, label) { to = it }
+        MoneyField(amount) { amount = it }
+    }
 }
