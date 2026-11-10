@@ -226,6 +226,7 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
                 vm.savePersonEdit(r.person, name, payKind, splits)
                 editPerson = null
             },
+            onEditEntry = { ref, amount, date -> vm.editHistoryEntry(ref, amount, date) },
             onDelete = {
                 vm.deletePerson(r.person)
                 editPerson = null
@@ -248,9 +249,11 @@ private fun DebtEditDialog(
     accounts: List<Account>,
     onDismiss: () -> Unit,
     onSave: (name: String, splits: List<Pair<Long, Double>>) -> Unit,
+    onEditEntry: (ref: Long, amount: Double, date: java.time.LocalDate) -> Unit,
     onDelete: () -> Unit,
 ) {
     val ctx = LocalContext.current
+    var editingEntry by remember(person) { mutableStateOf<HistoryItem?>(null) }
     var adding by remember(person) { mutableStateOf(false) }
     var confirmDelete by remember(person) { mutableStateOf(false) }
     // একবার সেভ হলে শেয়ারে একই ছবি ব্যবহার হয়, দুটো কপি হয় না
@@ -289,7 +292,8 @@ private fun DebtEditDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 // শুধু দেখার অবস্থা: নাম মাঝখানে, তিন কলাম, নিচে মোট
-                DebtTable(person, entries)
+                // লাইনে চাপলে সেই লাইনের টাকা ও তারিখ এডিট
+                DebtTable(person, entries, onEntryClick = { editingEntry = it })
             }
         },
         // বাটন: + | সেভ গ্যালারি | শেয়ার | মুছুন (চারটি এক লাইনে, তাই ফাঁকা কম)
@@ -307,6 +311,19 @@ private fun DebtEditDialog(
             }
         },
     )
+
+    editingEntry?.let { h ->
+        EditEntryDialog(
+            title = h.label,
+            initialAmount = h.amount,
+            initialDate = h.date,
+            onDismiss = { editingEntry = null },
+            onSave = { amount, date ->
+                onEditEntry(h.ref, amount, date)
+                editingEntry = null
+            },
+        )
+    }
 
     if (adding) {
         DebtAddScreen(
