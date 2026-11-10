@@ -76,7 +76,12 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         val debtMap = listOf(Kind.LOAN, Kind.LENT, Kind.SHOP).associateWith { db.debts(it) }
         val month = db.monthItems()
         fun sum(vararg types: String) = accs.filter { it.type in types }.sumOf { it.balance }
-        fun owed(kind: String) = debtMap[kind].orEmpty().sumOf { it.remaining }
+        // দিছি/নিছি: একই ব্যক্তির সব হিসাব মিলিয়ে বাকি; ফেরত বেশি হলে (ঋণাত্মক) ধরা হয় না
+        fun owed(kind: String): Double {
+            val list = debtMap[kind].orEmpty()
+            return if (kind == Kind.SHOP) list.sumOf { it.remaining }
+            else list.groupBy { it.person }.values.sumOf { g -> g.sumOf { it.remaining }.coerceAtLeast(0.0) }
+        }
         return Snapshot(
             accounts = accs,
             txns = db.txns(filter),
@@ -226,6 +231,8 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
                 left[i] = d to (rem - part)
                 rest -= part
             }
+            // সব বাকি শোধ হওয়ার পরেও টাকা থাকলে অতিরিক্তটা সবচেয়ে নতুন হিসাবে যায় (উল্টো দিকের পাওনা)
+            if (rest > 0.0001 && left.isNotEmpty()) db.pay(left.last().first, rest, accId)
         }
     }
 
