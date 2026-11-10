@@ -10,6 +10,8 @@ import com.hisab.app.data.Account
 import com.hisab.app.data.Category
 import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.MonthItem
+import com.hisab.app.data.Note
+import com.hisab.app.data.debtNets
 import com.hisab.app.data.Debt
 import com.hisab.app.data.HisabDb
 import com.hisab.app.data.Kind
@@ -52,6 +54,8 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var debts by mutableStateOf(emptyMap<String, List<Debt>>())
         private set
+    var notes by mutableStateOf(emptyList<Note>())
+        private set
     var summary by mutableStateOf(Summary())
         private set
     var filter by mutableStateOf<String?>(null)
@@ -64,6 +68,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         val categories: List<Category>,
         val usedCategories: List<String>,
         val debts: Map<String, List<Debt>>,
+        val notes: List<Note>,
         val summary: Summary,
     )
 
@@ -76,15 +81,9 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         val debtMap = listOf(Kind.LOAN, Kind.LENT, Kind.SHOP).associateWith { db.debts(it) }
         val month = db.monthItems()
         fun sum(vararg types: String) = accs.filter { it.type in types }.sumOf { it.balance }
-        // দিছি/নিছি: একই ব্যক্তির সব হিসাব মিলিয়ে বাকি (ফেরত বেশি হলে এটা ০)
-        fun owed(kind: String): Double {
-            val list = debtMap[kind].orEmpty()
-            return if (kind == Kind.SHOP) list.sumOf { it.remaining }
-            else list.groupBy { it.person }.values.sumOf { g -> g.sumOf { it.remaining }.coerceAtLeast(0.0) }
-        }
-        // ফেরত বেশি হলে অতিরিক্তটা উল্টো দিকে গণ্য: দিছি-র অতিরিক্ত = নেওয়া, নিছি-র অতিরিক্ত = দেওয়া
-        fun excess(kind: String): Double =
-            debtMap[kind].orEmpty().groupBy { it.person }.values.sumOf { g -> (-g.sumOf { it.remaining }).coerceAtLeast(0.0) }
+        // দিছি + নিছি মিলিয়ে প্রতি ব্যক্তির নিট: ধনাত্মক = সে দেবে (ধার দেওয়া), ঋণাত্মক = আমি দেব (ধার নেওয়া)
+        val nets = debtNets(debtMap).values
+        fun owed(kind: String) = debtMap[kind].orEmpty().sumOf { it.remaining } // শুধু দোকান বাকির জন্য
         return Snapshot(
             accounts = accs,
             txns = db.txns(filter),
@@ -92,10 +91,11 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
             categories = db.categories(),
             usedCategories = db.usedCategories(),
             debts = debtMap,
+            notes = db.notes(),
             summary = Summary(
                 cash = sum("cash", "mobile", "bank"),
-                loan = owed(Kind.LOAN) + excess(Kind.LENT),
-                lent = owed(Kind.LENT) + excess(Kind.LOAN),
+                loan = nets.filter { it < 0 }.sumOf { -it },
+                lent = nets.filter { it > 0 }.sum(),
                 shop = owed(Kind.SHOP),
                 dps = sum("dps"),
                 asset = accs
@@ -115,6 +115,7 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         categories = s.categories
         usedCategories = s.usedCategories
         debts = s.debts
+        notes = s.notes
         summary = s.summary
     }
 
@@ -139,8 +140,15 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     fun addTxn(type: String, amount: Double, accountId: Long, category: String, note: String) =
         exec { db.addTxn(type, amount, accountId, category, note) }
 
-    /** একজনের ধার-হিসাবের তালিকা (শুধু দেখার জন্য) */
-    fun debtHistory(kind: String, person: String): List<HistoryItem> = db.debtHistory(kind, person)
+    /** একজনের দেওয়া-নেওয়া-ফেরতের একটানা খাতা (দিছি ও নিছি মিলিয়ে) */
+    fun personHistory(person: String): List<HistoryItem> = db.personHistory(person)
+
+    /** একটি অ্যাকাউন্টের সব লেনদেন */
+    fun accountTxns(accountId: Long): List<Txn> = db.accountTxns(accountId)
+
+    fun addNote(text: String) = exec { db.addNote(text) }
+    fun updateNote(id: Long, text: String) = exec { db.updateNote(id, text) }
+    fun deleteNote(id: Long) = exec { db.deleteNote(id) }
 
     fun addBakiExpense(amount: Double, category: String, note: String, date: java.time.LocalDate) =
         exec { db.addBakiExpense(amount, category, note, date) }
@@ -194,9 +202,6 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         date: java.time.LocalDate,
     ) = exec { db.addDebt(kind, person, note, splits, date) }
 
-    /** একটি ধার-হিসাবের সব এন্ট্রি (শুধু দেখার জন্য) */
-    fun debtEntries(id: Long): List<HistoryItem> = db.debtEntries(id)
-
     /** একাধিক অ্যাকাউন্টে ভাগ করা লেনদেন */
     fun addTxns(
         type: String,
@@ -214,15 +219,23 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteDebt(id: Long) = exec { db.deleteDebt(id) }
 
-    fun deleteDebts(ids: List<Long>) = exec { ids.forEach { db.deleteDebt(it) } }
+    /** একজনের সব হিসাব (দিছি ও নিছি) মোছে */
+    fun deletePerson(person: String) = exec {
+        listOf(Kind.LENT, Kind.LOAN).forEach { k -> db.debts(k).filter { it.person == person }.forEach { db.deleteDebt(it.id) } }
+    }
 
     /**
-     * একই ব্যক্তির সব হিসাবের এডিট: নাম বদল + ফেরত/পরিশোধ।
-     * টাকা পুরনো হিসাব থেকে আগে বাদ যায় (একটি পুরো শোধ হলে পরেরটিতে)।
+     * একজনের এডিট: নাম বদল (দুই ধরনেই) + ফেরত/পরিশোধ। payKind: যে ধরনের হিসাবে টাকা মেলানো হবে
+     * (সে দেবে → lent, আমি দেব → loan)। টাকা পুরনো হিসাব থেকে আগে বাদ যায়;
+     * সব শোধের পরেও বাড়তি থাকলে সেটা সবচেয়ে নতুন হিসাবে যায়, ফলে নিট উল্টে গিয়ে অন্য ট্যাবে চলে যায়।
      */
-    fun saveGroupEdit(kind: String, oldName: String, newName: String, debts: List<Debt>, splits: List<Pair<Long, Double>>) = exec {
-        if (newName != oldName) db.renameDebtPerson(kind, oldName, newName)
-        val left = debts.sortedBy { it.id }.map { it.copy(person = newName) to it.remaining }.toMutableList()
+    fun savePersonEdit(oldName: String, newName: String, payKind: String, splits: List<Pair<Long, Double>>) = exec {
+        if (newName != oldName) {
+            db.renameDebtPerson(Kind.LENT, oldName, newName)
+            db.renameDebtPerson(Kind.LOAN, oldName, newName)
+        }
+        val left = db.debts(payKind).filter { it.person == newName }.sortedBy { it.id }
+            .map { it to it.remaining }.toMutableList()
         splits.forEach { (accId, amount) ->
             var rest = amount
             for (i in left.indices) {
@@ -234,7 +247,6 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
                 left[i] = d to (rem - part)
                 rest -= part
             }
-            // সব বাকি শোধ হওয়ার পরেও টাকা থাকলে অতিরিক্তটা সবচেয়ে নতুন হিসাবে যায় (উল্টো দিকের পাওনা)
             if (rest > 0.0001 && left.isNotEmpty()) db.pay(left.last().first, rest, accId)
         }
     }
