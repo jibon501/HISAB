@@ -71,6 +71,14 @@ object Kind {
 /** ধার-হিসাবের প্রথম এন্ট্রির লেবেল */
 fun debtLabel(kind: String): String = if (kind == Kind.LENT) "ধার দিয়েছি" else "ধার নিয়েছি"
 
+/**
+ * ধার-হিসাবের নিচের মোটের লেবেল ও পরিমাণ। net = ধার − ফেরত।
+ * ফেরত বেশি হলে (net < 0) অতিরিক্তটা উল্টো দিকের হিসাব: দিছি-তে "আমার কাছে পাবে", নিছি-তে "আমি পাবো"।
+ */
+fun debtTotal(kind: String, net: Double): Pair<String, Double> =
+    if (net >= 0) (if (kind == Kind.LENT) "মোট দিয়েছি" else "মোট নিয়েছি") to net
+    else (if (kind == Kind.LENT) "আমার কাছে পাবে" else "আমি পাবো") to -net
+
 /** ফেরত/পরিশোধ এন্ট্রির লেবেল */
 fun repayLabel(kind: String): String = if (kind == Kind.LENT) "ফেরত নিছি" else "ফেরত দিয়েছি"
 
