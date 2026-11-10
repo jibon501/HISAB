@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Kind
+import com.hisab.app.data.debtNets
 import com.hisab.app.data.OTHER_ACCOUNT
 import com.hisab.app.data.fmtDate
 
@@ -116,23 +117,17 @@ private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
         // ব্যালেন্স ০ হলে দেখানো হয় না
         vm.accounts.filter { it.type in types && it.balance != 0.0 }.map { DRow(it.name, it.balance) }
 
-    // একই নামের একাধিক হিসাব যোগ করে মোট দেখায়
-    fun owed(kind: String) = vm.debts[kind].orEmpty()
-        .groupBy { it.person }
-        .map { (person, list) -> DRow(person, list.sumOf { it.remaining }, kind = kind) }
-        .filter { it.value > 0 }
+    // দেওয়া ও নেওয়া মিলিয়ে প্রতি ব্যক্তির নিট: ধনাত্মক = ধার দেওয়া কার্ডে, ঋণাত্মক (নেওয়া বেশি) = ধার নেওয়া কার্ডে
+    val nets = debtNets(vm.debts)
+    fun owed(kind: String) = nets
+        .filter { (_, n) -> if (kind == Kind.LENT) n > 0.0001 else n < -0.0001 }
+        .map { (person, n) -> DRow(person, if (kind == Kind.LENT) n else -n, kind = kind) }
         .sortedByDescending { it.value }
-
-    // ফেরত বেশি হওয়া ব্যক্তিরা: অতিরিক্তটা উল্টো দিকের কার্ডে যোগ হয় (ট্যাপ করলে নিজের হিসাবই খোলে)
-    fun excess(kind: String) = vm.debts[kind].orEmpty()
-        .groupBy { it.person }
-        .map { (person, list) -> DRow(person, -list.sumOf { it.remaining }, kind = kind) }
-        .filter { it.value > 0.0001 }
 
     return when (d) {
         Detail.CASH -> accounts("cash", "mobile", "bank")
-        Detail.LOAN -> (owed(Kind.LOAN) + excess(Kind.LENT)).sortedByDescending { it.value }
-        Detail.LENT -> (owed(Kind.LENT) + excess(Kind.LOAN)).sortedByDescending { it.value }
+        Detail.LOAN -> owed(Kind.LOAN)
+        Detail.LENT -> owed(Kind.LENT)
         Detail.DPS -> accounts("dps")
         Detail.ASSET -> vm.accounts
             .filter { it.type !in ASSET_EXCLUDED_TYPES && it.name != OTHER_ACCOUNT && it.balance != 0.0 }
@@ -219,12 +214,12 @@ private fun DetailDialog(
 /** একজনের ধার-হিসাব: কবে কত ধার নেওয়া/দেওয়া, কবে কত ফেরত (শুধু দেখার জন্য, এডিট বা শেয়ার নেই) */
 @Composable
 private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, onDismiss: () -> Unit) {
-    val items = remember(kind, person, vm.debts) { vm.debtHistory(kind, person) }
+    val items = remember(person, vm.debts) { vm.personHistory(person) }
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                DebtTable(person, kind, items)
+                DebtTable(person, items)
             }
         },
         // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়, আলাদা বাটন নেই

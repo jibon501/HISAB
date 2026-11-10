@@ -23,8 +23,8 @@ import com.hisab.app.data.fmtDate
  * আর পরিমাণ কলামের নিচে "মোট=..."।
  */
 @Composable
-fun DebtTable(person: String, kind: String, entries: List<HistoryItem>) {
-    val total = entries.sumOf { if (it.payment) -it.amount else it.amount }
+fun DebtTable(person: String, entries: List<HistoryItem>) {
+    val total = entries.sumOf { it.delta }
     val dateW = 1.05f
     val typeW = 1.1f
     val amountW = 1f
@@ -60,8 +60,8 @@ fun DebtTable(person: String, kind: String, entries: List<HistoryItem>) {
         }
         HorizontalDivider()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            // ফেরত বেশি হলে অতিরিক্তটা উল্টো দিকের লেবেলে (যেমন "আমার কাছে পাবে")
-            val (label, amount) = debtTotal(kind, total)
+            // দেওয়া ও নেওয়া মিলিয়ে নিট: নেওয়া বেশি হলে অতিরিক্তটা "মোট নিয়েছি"
+            val (label, amount) = debtTotal(total)
             Text("$label=${tk(amount)}", fontWeight = FontWeight.Bold)
         }
     }

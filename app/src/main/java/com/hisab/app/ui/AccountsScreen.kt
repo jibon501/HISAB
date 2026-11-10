@@ -19,6 +19,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.sp
+import com.hisab.app.data.fmtDate
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +54,7 @@ fun AccountsScreen(vm: HisabViewModel) {
     var showAdd by remember { mutableStateOf(false) }
     var showTransfer by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Account?>(null) }
+    var viewing by remember { mutableStateOf<Account?>(null) } // যে অ্যাকাউন্টের সব লেনদেন দেখা হচ্ছে
     var deleting by remember { mutableStateOf<Account?>(null) }
 
     // নিজে যোগ করা ধরনগুলো (সবার শেষে, "অন্যান্য"-এর আগে)
@@ -58,20 +64,15 @@ fun AccountsScreen(vm: HisabViewModel) {
     Scaffold(
         // উপরের অংশের জায়গা বাইরের কাঠামোই ধরে, তাই এখানে আলাদা ইনসেট নেই
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // ভাসমান বাটন: উপরে ট্রান্সফার (ছোট), নিচে নতুন অ্যাকাউন্ট (+)
+        // ভাসমান "+": নতুন অ্যাকাউন্ট (ট্রান্সফার বাটন এক্সপোর্ট ও ইম্পোর্টের মাঝখানে)
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallFloatingActionButton(onClick = { showTransfer = true }) {
-                    Icon(Icons.Default.CompareArrows, contentDescription = "ট্রান্সফার")
-                }
-                FloatingActionButton(onClick = { showAdd = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "নতুন অ্যাকাউন্ট")
-                }
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Default.Add, contentDescription = "নতুন অ্যাকাউন্ট")
             }
         },
     ) { pad ->
         LazyColumn(Modifier.padding(pad)) {
-            item(key = "excel_bar") { ExcelBar(vm) }
+            item(key = "excel_bar") { ExcelBar(vm) { showTransfer = true } }
             typeOrder.forEach { type ->
                 val label = typeLabel(type)
                 val group = vm.accounts.filter { it.type == type }
@@ -86,8 +87,8 @@ fun AccountsScreen(vm: HisabViewModel) {
                     }
                     items(group, key = { it.id }) { a ->
                         ListItem(
-                            // ডিফল্ট "অন্যান্য" অ্যাকাউন্ট মোছা বা নাম বদল করা যায় না
-                            modifier = if (a.name == OTHER_ACCOUNT) Modifier else Modifier.clickable { editing = a },
+                            // চাপলে এই অ্যাকাউন্টের সব লেনদেন দেখায়
+                            modifier = Modifier.clickable { viewing = a },
                             leadingContent = { AccountAvatar(a) },
                             headlineContent = { Text(a.name) },
                             trailingContent = {
@@ -119,6 +120,20 @@ fun AccountsScreen(vm: HisabViewModel) {
                 vm.transfer(from, to, amount)
                 showTransfer = false
             },
+        )
+    }
+
+    viewing?.let { a ->
+        // ব্যালেন্স বদলালে (নতুন লেনদেন) তালিকাও নতুন করে আসে
+        val balance = vm.accounts.firstOrNull { it.id == a.id }?.balance ?: a.balance
+        AccountTxnsDialog(
+            account = a,
+            balance = balance,
+            txns = remember(a.id, vm.txns, vm.accounts) { vm.accountTxns(a.id) },
+            // ডিফল্ট "অন্যান্য" অ্যাকাউন্ট মোছা বা নাম বদল করা যায় না
+            canEdit = a.name != OTHER_ACCOUNT,
+            onEdit = { editing = a; viewing = null },
+            onDismiss = { viewing = null },
         )
     }
 
@@ -268,4 +283,62 @@ private fun TransferDialog(
         Picker("যে অ্যাকাউন্টে", accounts, to, label) { to = it }
         MoneyField(amount) { amount = it }
     }
+}
+
+/** একটি অ্যাকাউন্টের যাবতীয় লেনদেন (নতুন আগে)। নিচে "সম্পাদনা" (নাম বদল/মোছা) ও "বন্ধ" */
+@Composable
+private fun AccountTxnsDialog(
+    account: Account,
+    balance: Double,
+    txns: List<com.hisab.app.data.Txn>,
+    canEdit: Boolean,
+    onEdit: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(account.name)
+                Text("ব্যালেন্স: ${tk(balance)}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        },
+        text = {
+            if (txns.isEmpty()) {
+                Text("কোনো লেনদেন নেই")
+            } else {
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(txns, key = { it.id }) { t ->
+                        val credit = t.type == "credit"
+                        val color = if (t.cleared) Color.Gray else if (credit) Color(0xFF2E7D32) else Color(0xFFC62828)
+                        val deco = if (t.cleared) TextDecoration.LineThrough else null
+                        Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    t.category + if (t.note.isNotBlank()) " • ${t.note}" else "",
+                                    fontSize = 14.sp,
+                                    color = if (t.cleared) Color.Gray else Color.Unspecified,
+                                    textDecoration = deco,
+                                )
+                                Text(fmtDate(t.date), fontSize = 11.sp, color = Color.Gray, textDecoration = deco)
+                            }
+                            Text(
+                                (if (credit) "+" else "-") + tk(t.amount),
+                                color = color,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                textDecoration = deco,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                if (canEdit) TextButton(onClick = onEdit) { Text("সম্পাদনা") }
+                TextButton(onClick = onDismiss) { Text("বন্ধ") }
+            }
+        },
+    )
 }

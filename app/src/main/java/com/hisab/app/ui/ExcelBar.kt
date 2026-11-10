@@ -7,7 +7,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,7 +31,7 @@ private const val XLSX_MIME = "application/vnd.openxmlformats-officedocument.spr
 
 /** অ্যাকাউন্ট স্ক্রিনের উপরের দুটি বাটন: সব ডেটা xlsx-এ এক্সপোর্ট ও ইম্পোর্ট */
 @Composable
-fun ExcelBar(vm: HisabViewModel) {
+fun ExcelBar(vm: HisabViewModel, onTransfer: () -> Unit) {
     val ctx = LocalContext.current
     var pendingImport by remember { mutableStateOf<Uri?>(null) }
 
@@ -49,11 +54,16 @@ fun ExcelBar(vm: HisabViewModel) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         OutlinedButton(
             onClick = { exportLauncher.launch("hisab-backup-${LocalDate.now()}.xlsx") },
             modifier = Modifier.weight(1f),
         ) { Text("এক্সপোর্ট") }
+        // এক্সপোর্ট ও ইম্পোর্টের মাঝখানে ট্রান্সফার বাটন
+        FilledTonalIconButton(onClick = onTransfer) {
+            Icon(Icons.Default.CompareArrows, contentDescription = "ট্রান্সফার")
+        }
         OutlinedButton(
             onClick = { importLauncher.launch(arrayOf("*/*")) },
             modifier = Modifier.weight(1f),

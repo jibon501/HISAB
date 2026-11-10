@@ -10,6 +10,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
@@ -30,12 +31,13 @@ private data class NavTab(val label: String, val icon: ImageVector)
 
 private val TABS = listOf(
     NavTab("ড্যাশবোর্ড", Icons.Default.Dashboard),
-    NavTab("লগবুক", Icons.Default.Receipt),
     NavTab("ধার", Icons.Default.SwapVert), // ভেতরে দিছি / নিছি বাছাই
+    NavTab("লগবুক", Icons.Default.Receipt),
+    NavTab("নোট", Icons.Default.Description),
     NavTab("অ্যাকাউন্ট", Icons.Default.AccountBalanceWallet),
 )
 
-/** অ্যাপের মূল কাঠামো: নিচে ৪টি ট্যাব। স্ক্রিন ধরে ডানে-বামে টানলেও ট্যাব বদলায় */
+/** অ্যাপের মূল কাঠামো: নিচে ৫টি ট্যাব। স্ক্রিন ধরে ডানে-বামে টানলেও ট্যাব বদলায় */
 @Composable
 fun HisabApp(vm: HisabViewModel = viewModel()) {
     val pager = rememberPagerState(pageCount = { TABS.size })
@@ -73,8 +75,9 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
             Box(Modifier.fillMaxSize()) {
                 when (page) {
                     0 -> DashboardScreen(vm)
-                    1 -> TransactionsScreen(vm)
-                    2 -> DebtsScreen(vm)
+                    1 -> DebtsScreen(vm)
+                    2 -> TransactionsScreen(vm)
+                    3 -> NotesScreen(vm)
                     else -> AccountsScreen(vm)
                 }
             }

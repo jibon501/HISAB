@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.hisab.app.HisabViewModel
 import com.hisab.app.data.Kind
@@ -207,7 +208,10 @@ private val DEBT_CATS = setOf("ধার নিছি", "ধার দিছি"
 @Composable
 private fun TxnRow(t: Txn, index: Int, onEdit: () -> Unit, onDelete: () -> Unit) {
     val credit = t.type == "credit"
-    val color = if (credit) GREEN else RED
+    // ক্লিয়ার (শোধ হওয়া) লেনদেন: ধূসর ও কাটা দাগ
+    val color = if (t.cleared) Color.Gray else if (credit) GREEN else RED
+    val deco = if (t.cleared) TextDecoration.LineThrough else null
+    val base = if (t.cleared) Color.Gray else Color.Unspecified
     Row(
         Modifier
             .fillMaxWidth()
@@ -224,23 +228,24 @@ private fun TxnRow(t: Txn, index: Int, onEdit: () -> Unit, onDelete: () -> Unit)
         // নামে (সারির লেখার অংশে) চাপলে তারিখ ও টাকার পরিমাণ এডিট করা যায়
         Column(Modifier.weight(1f).clickable(onClick = onEdit).padding(start = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(t.category, fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium)
+                Text(t.category, fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = base, textDecoration = deco)
                 if (t.baki) {
-                    Text("  বাকি", fontSize = 11.sp, lineHeight = 16.sp, color = Color(0xFFFB8C00), fontWeight = FontWeight.Bold)
+                    Text("  বাকি", fontSize = 11.sp, lineHeight = 16.sp, color = if (t.cleared) Color.Gray else Color(0xFFFB8C00), fontWeight = FontWeight.Bold, textDecoration = deco)
                 } else if (t.category in DEBT_CATS && t.note.isNotBlank()) {
-                    Text("  ${t.note}", fontSize = 11.sp, lineHeight = 16.sp, color = Color.Gray)
+                    Text("  ${t.note}", fontSize = 11.sp, lineHeight = 16.sp, color = Color.Gray, textDecoration = deco)
                 }
             }
             val note = if (t.note.isNotBlank() && !t.baki && t.category !in DEBT_CATS) " • ${t.note}" else ""
             val bakiNote = if (t.baki && t.note.isNotBlank()) " • ${t.note}" else ""
             // খাতের নামের ঠিক নিচে, কোনো ফাঁকা ছাড়া
-            Text("${fmtDate(t.date)}$note$bakiNote", fontSize = 11.sp, lineHeight = 12.sp, color = Color.Gray)
+            Text("${fmtDate(t.date)}$note$bakiNote", fontSize = 11.sp, lineHeight = 12.sp, color = Color.Gray, textDecoration = deco)
         }
         Text(
             (if (credit) "+" else "-") + tk(t.amount),
             color = color,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
+            textDecoration = deco,
         )
         IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Default.Delete, contentDescription = "মুছুন", modifier = Modifier.size(18.dp))

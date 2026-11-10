@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.SelectableDates
@@ -41,7 +42,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import com.hisab.app.data.debtLabel
-import com.hisab.app.data.debtTotal
+import com.hisab.app.data.debtNets
 import com.hisab.app.data.repayLabel
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -74,15 +75,6 @@ import com.hisab.app.data.Kind
 import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.fmtDate
 
-/** একই ব্যক্তির সব ধার/দেওয়া এক সারিতে (লেনদেন ট্যাবে এগুলো আলাদাই থাকে) */
-private class DebtGroup(val person: String, val kind: String, val debts: List<Debt>) {
-    val remaining get() = debts.sumOf { it.remaining }
-    val date get() = debts.maxOf { it.date } // সবচেয়ে নতুন তারিখ
-
-    /** ডায়ালগের জন্য একটি মিলিত হিসাব */
-    fun merged() = Debt(debts.maxOf { it.id }, kind, person, debts.sumOf { it.total }, remaining, date)
-}
-
 /** একটি "ধার" ট্যাব: উপরে দিছি | নিছি বাছাই, নিচে সেটার তালিকা। ভাসমান "+" বাছা ধরনে নতুন ধার যোগ করে */
 @Composable
 fun DebtsScreen(vm: HisabViewModel) {
@@ -109,14 +101,36 @@ fun DebtsScreen(vm: HisabViewModel) {
     }
 }
 
-/** বাছা ধরনের (দিছি / নিছি) তালিকা। নতুন ধার যোগ হয় ভাসমান "+" থেকে */
+/** তালিকার একটি সারি: একজন ব্যক্তি (দেওয়া ও নেওয়া মিলিয়ে) */
+private class PersonRow(
+    val person: String,
+    val net: Double, // ধনাত্মক = সে দেবে, ঋণাত্মক = আমি দেব, ০ = ক্লিয়ার
+    val date: String, // সবচেয়ে নতুন তারিখ
+    val lastId: Long,
+    val clearedTotal: Double, // ক্লিয়ার হলে এই ট্যাবের ধরনের মোট (কাটা দাগে দেখানোর জন্য)
+)
+
+/**
+ * বাছা ধরনের (দিছি / নিছি) তালিকা। একই ব্যক্তির সব দেওয়া-নেওয়া এক সারিতে মিলে যায়:
+ * দেওয়া থেকে নেওয়া বেশি হলে অতিরিক্তটা নিছি ট্যাবে আসে (উল্টোটাও)। ক্লিয়ার হলে ধূসর ও কাটা দাগে থাকে।
+ */
 @Composable
 private fun DebtsPane(vm: HisabViewModel, kind: String) {
-    var editPerson by remember(kind) { mutableStateOf<String?>(null) }
+    var editPerson by remember { mutableStateOf<String?>(null) }
     var showAdd by remember(kind) { mutableStateOf(false) }
-    val list = vm.debts[kind].orEmpty()
-    // তালিকা নতুন আগে সাজানো; groupBy প্রথম আসার ক্রম রাখে
-    val groups = list.groupBy { it.person }.map { (p, ds) -> DebtGroup(p, kind, ds) }
+    val lent = kind == Kind.LENT
+    val eps = 0.0001
+
+    val all = vm.debts[Kind.LENT].orEmpty() + vm.debts[Kind.LOAN].orEmpty()
+    val nets = debtNets(vm.debts)
+    val rows = all.groupBy { it.person }.mapNotNull { (person, ds) ->
+        val net = nets[person] ?: 0.0
+        val mine = ds.filter { it.kind == kind }
+        val visible = if (lent) net > eps else net < -eps
+        val clearedHere = kotlin.math.abs(net) <= eps && mine.isNotEmpty()
+        if (!visible && !clearedHere) null
+        else PersonRow(person, net, ds.maxOf { it.date }, ds.maxOf { it.id }, mine.sumOf { it.total })
+    }.sortedByDescending { it.lastId }
 
     Scaffold(
         // উপরের অংশের জায়গা বাইরের কাঠামোই ধরে, তাই এখানে আলাদা ইনসেট নেই
@@ -129,13 +143,15 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
         },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
-            if (list.isEmpty()) {
+            if (rows.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("কোনো হিসাব নেই") }
             } else {
                 // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি মোটের নিচে ঢাকা না পড়ে
                 LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-                    itemsIndexed(groups, key = { _, g -> g.person }) { i, g ->
-                        val done = g.remaining <= 0.0001
+                    itemsIndexed(rows, key = { _, r -> r.person }) { i, r ->
+                        val done = kotlin.math.abs(r.net) <= eps
+                        val dim = Color.Gray
+                        val deco = if (done) TextDecoration.LineThrough else null
                         // এক লাইন পর পর হালকা ধূসর বক্স; বক্স লেখার চেয়ে সামান্য বড়
                         Row(
                             Modifier
@@ -144,58 +160,49 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
                                     if (i % 2 == 1) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                     else Color.Transparent
                                 )
-                                .clickable { editPerson = g.person }
+                                .clickable { editPerson = r.person }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // "তারিখ নাম": তারিখ ছোট ও ধূসর
                             Text(
                                 buildAnnotatedString {
-                                    withStyle(SpanStyle(fontSize = 11.sp, color = Color.Gray)) { append(fmtDate(g.date)) }
+                                    withStyle(SpanStyle(fontSize = 11.sp, color = Color.Gray)) { append(fmtDate(r.date)) }
                                     append("  ")
-                                    append(g.person)
+                                    append(r.person)
                                 },
                                 modifier = Modifier.weight(1f),
                                 fontSize = 15.sp,
+                                color = if (done) dim else Color.Unspecified,
+                                textDecoration = deco,
                             )
-                            // ফেরত বেশি হলে অতিরিক্তটা উল্টো লেবেলে (কমলা রঙে)
-                            val over = g.remaining < -0.0001
                             Text(
-                                when {
-                                    over -> debtTotal(kind, g.remaining).let { (l, a) -> "$l ${tk(a)}" }
-                                    done -> "পরিশোধিত ✓"
-                                    else -> tk(g.remaining)
-                                },
+                                tk(if (done) r.clearedTotal else if (lent) r.net else -r.net),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = when {
-                                    over -> Color(0xFFEF6C00)
-                                    done -> Color(0xFF2E7D32)
-                                    else -> Color(0xFFC62828)
-                                },
+                                color = if (done) dim else Color(0xFFC62828),
+                                textDecoration = deco,
                             )
                         }
                     }
                 }
             }
-            // স্ক্রিনে যা দেখা যাচ্ছে তার মোট বাকি: নিচে বামে, ছোট ও ধূসর
-            // দিছি-তে "মোট দিয়েছি", নিছি-তে "মোট নিয়েছি"; ফেরত বেশি হওয়া ব্যক্তিদের অতিরিক্ত আলাদা লাইনে
-            val owedTotal = groups.sumOf { it.remaining.coerceAtLeast(0.0) }
-            val extraTotal = groups.sumOf { (-it.remaining).coerceAtLeast(0.0) }
-            Column(Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp)) {
-                Text("${debtTotal(kind, 0.0).first}: ${tk(owedTotal)}", fontSize = 12.sp, color = Color.Gray)
-                if (extraTotal > 0.0001) {
-                    Text("${debtTotal(kind, -1.0).first}: ${tk(extraTotal)}", fontSize = 12.sp, color = Color.Gray)
-                }
-            }
+            // স্ক্রিনে যা দেখা যাচ্ছে তার মোট: দিছি-তে "মোট দিয়েছি", নিছি-তে "মোট নিয়েছি"
+            val total = rows.sumOf { if (lent) it.net.coerceAtLeast(0.0) else (-it.net).coerceAtLeast(0.0) }
+            Text(
+                "${if (lent) "মোট দিয়েছি" else "মোট নিয়েছি"}: ${tk(total)}",
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp),
+                fontSize = 12.sp,
+                color = Color.Gray,
+            )
         }
     }
 
     if (showAdd) {
         AddDebtDialog(
             kind = kind,
-            accounts = if (kind == Kind.LENT) vm.accounts.withMoney() else vm.accounts,
-            personSuggestions = vm.debts.values.flatten().sortedByDescending { it.id }.map { it.person }.distinct(),
+            accounts = if (lent) vm.accounts.withMoney() else vm.accounts,
+            personSuggestions = all.sortedByDescending { it.id }.map { it.person }.distinct(),
             onDismiss = { showAdd = false },
             onSave = { person, note, splits, date ->
                 vm.addDebt(kind, person, note, splits, date)
@@ -204,19 +211,23 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
         )
     }
 
-    groups.firstOrNull { it.person == editPerson }?.let { g ->
+    rows.firstOrNull { it.person == editPerson }?.let { r ->
+        // সে দেবে (নিট > ০) → "ফেরত নিছি" (দিছি-র হিসাবে মেলে); আমি দেব (নিট < ০) → "ফেরত দিয়েছি" (নিছি-র হিসাবে মেলে)
+        val payKind = if (r.net > 0) Kind.LENT else Kind.LOAN
         DebtEditDialog(
-            debt = g.merged(),
-            entries = vm.debtHistory(g.kind, g.person),
+            person = r.person,
+            payKind = payKind,
+            canPay = kotlin.math.abs(r.net) > eps && all.any { it.person == r.person && it.kind == payKind },
+            entries = vm.personHistory(r.person),
             // ধার পরিশোধে টাকা বেরিয়ে যায়, ধার ফেরত পেলে টাকা ঢোকে
-            accounts = if (g.kind == Kind.LOAN) vm.accounts.withMoney() else vm.accounts,
+            accounts = if (payKind == Kind.LOAN) vm.accounts.withMoney() else vm.accounts,
             onDismiss = { editPerson = null },
             onSave = { name, splits ->
-                vm.saveGroupEdit(g.kind, g.person, name, g.debts, splits)
+                vm.savePersonEdit(r.person, name, payKind, splits)
                 editPerson = null
             },
             onDelete = {
-                vm.deleteDebts(g.debts.map { it.id })
+                vm.deletePerson(r.person)
                 editPerson = null
             },
         )
@@ -230,7 +241,9 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
  */
 @Composable
 private fun DebtEditDialog(
-    debt: Debt,
+    person: String,
+    payKind: String, // যে ধরনের হিসাবে ফেরত মেলানো হবে: সে দেবে → lent, আমি দেব → loan
+    canPay: Boolean, // বাকি থাকলে তবেই ফেরত যোগ করা যায়
     entries: List<HistoryItem>,
     accounts: List<Account>,
     onDismiss: () -> Unit,
@@ -238,17 +251,17 @@ private fun DebtEditDialog(
     onDelete: () -> Unit,
 ) {
     val ctx = LocalContext.current
-    var adding by remember(debt.id) { mutableStateOf(false) }
-    var confirmDelete by remember(debt.id) { mutableStateOf(false) }
+    var adding by remember(person) { mutableStateOf(false) }
+    var confirmDelete by remember(person) { mutableStateOf(false) }
     // একবার সেভ হলে শেয়ারে একই ছবি ব্যবহার হয়, দুটো কপি হয় না
-    var savedUri by remember(debt.id) { mutableStateOf<android.net.Uri?>(null) }
+    var savedUri by remember(person) { mutableStateOf<android.net.Uri?>(null) }
 
     fun ensureSaved(): android.net.Uri? {
         savedUri?.let { return it }
         return saveToGallery(
             ctx,
-            buildHistoryBitmap(debt.person, debt.kind, entries),
-            "hisab_${debt.person}_${System.currentTimeMillis()}".replace(" ", "_"),
+            buildHistoryBitmap(person, entries),
+            "hisab_${person}_${System.currentTimeMillis()}".replace(" ", "_"),
         ).also { savedUri = it }
     }
 
@@ -264,7 +277,7 @@ private fun DebtEditDialog(
 
     fun share() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-            shareText(ctx, debt.person, debt.kind, entries)
+            shareText(ctx, person, entries)
             return
         }
         val uri = ensureSaved()
@@ -276,7 +289,7 @@ private fun DebtEditDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 // শুধু দেখার অবস্থা: নাম মাঝখানে, তিন কলাম, নিচে মোট
-                DebtTable(debt.person, debt.kind, entries)
+                DebtTable(person, entries)
             }
         },
         // বাটন: + | সেভ গ্যালারি | শেয়ার | মুছুন (চারটি এক লাইনে, তাই ফাঁকা কম)
@@ -297,7 +310,9 @@ private fun DebtEditDialog(
 
     if (adding) {
         DebtAddScreen(
-            debt = debt,
+            person = person,
+            payKind = payKind,
+            canPay = canPay,
             accounts = accounts,
             onCancel = { adding = false },
             onSave = onSave,
@@ -307,8 +322,8 @@ private fun DebtEditDialog(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("\"${debt.person}\" মুছবেন?") },
-            text = { Text("এই হিসাবের সব লেনদেন মুছে যাবে এবং অ্যাকাউন্টের ব্যালেন্স আগের অবস্থায় ফিরবে।") },
+            title = { Text("\"${person}\" মুছবেন?") },
+            text = { Text("এই ব্যক্তির সব দেওয়া-নেওয়ার লেনদেন মুছে যাবে এবং অ্যাকাউন্টের ব্যালেন্স আগের অবস্থায় ফিরবে।") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; onDelete() }) {
                     Text("মুছুন", color = MaterialTheme.colorScheme.error)
@@ -322,19 +337,21 @@ private fun DebtEditDialog(
 /** "+" চাপলে ছোট ফর্ম ডায়ালগ: নাম বদল ও ফেরতের লাইন; নিচে "সংরক্ষণ" ও "বাতিল" */
 @Composable
 private fun DebtAddScreen(
-    debt: Debt,
+    person: String,
+    payKind: String,
+    canPay: Boolean,
     accounts: List<Account>,
     onCancel: () -> Unit,
     onSave: (name: String, splits: List<Pair<Long, Double>>) -> Unit,
 ) {
     val ctx = LocalContext.current
-    val lent = debt.kind == Kind.LENT
-    val done = debt.remaining <= 0.0
-    var name by remember(debt.id) { mutableStateOf(debt.person) }
-    var lines by remember(debt.id) { mutableStateOf(listOf(SplitLine())) }
+    val lent = payKind == Kind.LENT
+    val done = !canPay
+    var name by remember(person) { mutableStateOf(person) }
+    var lines by remember(person) { mutableStateOf(listOf(SplitLine())) }
 
     FormDialog(
-        title = repayLabel(debt.kind),
+        title = repayLabel(payKind),
         centerTitle = true,
         confirmText = "সংরক্ষণ",
         onDismiss = onCancel,
