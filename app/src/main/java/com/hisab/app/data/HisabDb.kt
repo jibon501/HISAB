@@ -60,7 +60,14 @@ fun fmtDate(iso: String): String {
  * একজনের ধার-হিসাবের একটি এন্ট্রি (payment = true হলে ফেরত/পরিশোধ)।
  * delta = এই এন্ট্রির পর "সে আমাকে কত দেবে" যত বাড়ল (দিলে +, নিলে −, ফেরত নিলে −, ফেরত দিলে +)
  */
-data class HistoryItem(val date: String, val label: String, val amount: Double, val payment: Boolean, val delta: Double)
+data class HistoryItem(
+    val date: String,
+    val label: String,
+    val amount: Double,
+    val payment: Boolean,
+    val delta: Double,
+    val ref: Long = 0, // এডিটের জন্য: ফেরত হলে লেনদেনের আইডি (+), ধার/দেওয়ার প্রথম এন্ট্রি হলে −(হিসাবের আইডি)
+)
 
 /** চলতি মাসের খরচের একটি সারি। remaining > 0 হলে সেটা বাকি */
 data class MonthItem(val title: String, val amount: Double, val remaining: Double, val debtId: Long = 0L)
@@ -472,18 +479,18 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
         val db = readableDatabase
         val out = mutableListOf<HistoryItem>()
         db.rawQuery(
-            "SELECT date, total, kind FROM debts WHERE person = ? AND kind IN ('lent','loan')",
+            "SELECT date, total, kind, id FROM debts WHERE person = ? AND kind IN ('lent','loan')",
             arrayOf(person),
         ).use { c ->
             while (c.moveToNext()) {
                 val kind = c.getString(2)
                 val amount = c.getDouble(1)
-                out += HistoryItem(c.getString(0), debtLabel(kind), amount, false, if (kind == Kind.LENT) amount else -amount)
+                out += HistoryItem(c.getString(0), debtLabel(kind), amount, false, if (kind == Kind.LENT) amount else -amount, -c.getLong(3))
             }
         }
         db.rawQuery(
             """
-            SELECT t.date, t.amount, d.kind FROM txns t JOIN debts d ON d.id = t.debt_id
+            SELECT t.date, t.amount, d.kind, t.id FROM txns t JOIN debts d ON d.id = t.debt_id
             WHERE d.person = ? AND d.kind IN ('lent','loan') AND t.is_payment = 1
             """.trimIndent(),
             arrayOf(person),
@@ -491,7 +498,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
             while (c.moveToNext()) {
                 val kind = c.getString(2)
                 val amount = c.getDouble(1)
-                out += HistoryItem(c.getString(0), repayLabel(kind), amount, true, if (kind == Kind.LENT) -amount else amount)
+                out += HistoryItem(c.getString(0), repayLabel(kind), amount, true, if (kind == Kind.LENT) -amount else amount, c.getLong(3))
             }
         }
         return out.sortedBy { it.date }
@@ -546,14 +553,71 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
         }
     }
 
-    /** ট্রান্সফারের দুই দিকই একসাথে মুছে যায় (ref একই) */
+    /**
+     * লেনদেন মোছা (লগবুক থেকে)। ট্রান্সফারের দুই দিকই একসাথে মুছে যায় (ref একই)।
+     * ধারের মূল লেনদেন মুছলে হিসাবের মোট মিলিয়ে নেওয়া হয় (সব ভাগ মুছলে পুরো হিসাবই মুছে যায়),
+     * ফেরতের লেনদেন মুছলে বাকি নিজে থেকেই বেড়ে যায়। তাই ধার/অ্যাকাউন্ট/ড্যাশবোর্ড সব মিলে থাকে।
+     */
     fun deleteTxn(id: Long) {
         val db = writableDatabase
-        val ref = db.rawQuery("SELECT ref FROM txns WHERE id = ?", arrayOf(id.toString())).use { c ->
-            if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+        db.transaction<Unit> {
+            var ref: String? = null
+            var debtId: String? = null
+            var isPayment = false
+            rawQuery("SELECT ref, debt_id, is_payment FROM txns WHERE id = ?", arrayOf(id.toString())).use { c ->
+                if (c.moveToFirst()) {
+                    if (!c.isNull(0)) ref = c.getString(0)
+                    if (!c.isNull(1)) debtId = c.getString(1)
+                    isPayment = c.getInt(2) == 1
+                }
+            }
+            val r = ref
+            if (r != null) delete("txns", "ref = ?", arrayOf(r)) else delete("txns", "id = ?", arrayOf(id.toString()))
+            val d = debtId
+            if (d != null && !isPayment) {
+                val left = rawQuery(
+                    "SELECT COUNT(*), IFNULL(SUM(amount), 0) FROM txns WHERE debt_id = ? AND is_payment = 0", arrayOf(d),
+                ).use { c -> if (c.moveToFirst()) c.getInt(0) to c.getDouble(1) else 0 to 0.0 }
+                if (left.first == 0) {
+                    delete("txns", "debt_id = ?", arrayOf(d))
+                    delete("debts", "id = ?", arrayOf(d))
+                } else {
+                    update("debts", ContentValues().apply { put("total", left.second) }, "id = ?", arrayOf(d))
+                }
+            }
         }
-        if (ref != null) db.delete("txns", "ref = ?", arrayOf(ref))
-        else db.delete("txns", "id = ?", arrayOf(id.toString()))
+    }
+
+    /**
+     * ধার-খাতার প্রথম এন্ট্রি (দেওয়া/নেওয়া) এডিট: মোট ও তারিখ বদলায়।
+     * একাধিক অ্যাকাউন্টে ভাগ থাকলে ভাগগুলো আগের অনুপাতেই নতুন মোটে মেলানো হয়।
+     */
+    fun updateDebtEntry(debtId: Long, amount: Double, date: LocalDate) {
+        writableDatabase.transaction<Unit> {
+            val id = debtId.toString()
+            val oldDate = rawQuery("SELECT date FROM debts WHERE id = ?", arrayOf(id)).use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+            val newDate = withDate(oldDate, date)
+            val parts = mutableListOf<Pair<Long, Double>>()
+            rawQuery("SELECT id, amount FROM txns WHERE debt_id = ? AND is_payment = 0", arrayOf(id)).use { c ->
+                while (c.moveToNext()) parts += c.getLong(0) to c.getDouble(1)
+            }
+            val old = parts.sumOf { it.second }
+            parts.forEach { (tid, a) ->
+                val share = if (old > 0) amount * a / old else amount / parts.size
+                update(
+                    "txns",
+                    ContentValues().apply { put("amount", share); put("date", newDate) },
+                    "id = ?", arrayOf(tid.toString()),
+                )
+            }
+            update(
+                "debts",
+                ContentValues().apply { put("total", amount); put("date", newDate) },
+                "id = ?", arrayOf(id),
+            )
+        }
     }
 
     fun transfer(fromId: Long, toId: Long, amount: Double) {
