@@ -28,7 +28,11 @@ data class Txn(
     val note: String,
     val date: String,
     val baki: Boolean = false, // বাকি খরচ (পরে পরিশোধ হবে); id = −(হিসাবের আইডি)
+    val cleared: Boolean = false, // ধার/বাকি পুরোপুরি শোধ (ক্লিয়ার) হলে true: তালিকায় ধূসর ও কাটা দাগে দেখায়
 )
+
+/** নোট ট্যাবের একটি লেখা */
+data class Note(val id: Long, val text: String, val date: String)
 
 data class Debt(
     val id: Long,
@@ -52,8 +56,11 @@ fun fmtDate(iso: String): String {
     return text.map { if (it in '0'..'9') '\u09E6' + (it - '0') else it }.joinToString("")
 }
 
-/** একজনের ধার-হিসাবের একটি এন্ট্রি (payment = true হলে ফেরত/পরিশোধ) */
-data class HistoryItem(val date: String, val label: String, val amount: Double, val payment: Boolean)
+/**
+ * একজনের ধার-হিসাবের একটি এন্ট্রি (payment = true হলে ফেরত/পরিশোধ)।
+ * delta = এই এন্ট্রির পর "সে আমাকে কত দেবে" যত বাড়ল (দিলে +, নিলে −, ফেরত নিলে −, ফেরত দিলে +)
+ */
+data class HistoryItem(val date: String, val label: String, val amount: Double, val payment: Boolean, val delta: Double)
 
 /** চলতি মাসের খরচের একটি সারি। remaining > 0 হলে সেটা বাকি */
 data class MonthItem(val title: String, val amount: Double, val remaining: Double, val debtId: Long = 0L)
@@ -72,12 +79,22 @@ object Kind {
 fun debtLabel(kind: String): String = if (kind == Kind.LENT) "ধার দিয়েছি" else "ধার নিয়েছি"
 
 /**
- * ধার-হিসাবের নিচের মোটের লেবেল ও পরিমাণ। net = ধার − ফেরত।
- * ফেরত বেশি হলে (net < 0) অতিরিক্তটা উল্টো দিকের হিসাব: দিছি-তে "আমার কাছে পাবে", নিছি-তে "আমি পাবো"।
+ * ধার-হিসাবের নিচের মোটের লেবেল ও পরিমাণ। net = দেওয়া − নেওয়া (ফেরত মিলিয়ে)।
+ * নেওয়া বেশি হলে (net < 0) অতিরিক্তটা "মোট নিয়েছি" হিসেবে (নিছি ট্যাবে) দেখায়।
  */
-fun debtTotal(kind: String, net: Double): Pair<String, Double> =
-    if (net >= 0) (if (kind == Kind.LENT) "মোট দিয়েছি" else "মোট নিয়েছি") to net
-    else (if (kind == Kind.LENT) "আমার কাছে পাবে" else "আমি পাবো") to -net
+fun debtTotal(net: Double): Pair<String, Double> =
+    if (net >= 0) "মোট দিয়েছি" to net else "মোট নিয়েছি" to -net
+
+/**
+ * প্রতি ব্যক্তির নিট: দেওয়ার বাকি − নেওয়ার বাকি (দিছি ও নিছি মিলিয়ে)।
+ * ধনাত্মক = সে আমাকে দেবে (দিছি ট্যাব), ঋণাত্মক = আমি তাকে দেব (নিছি ট্যাব), ০ = ক্লিয়ার।
+ */
+fun debtNets(debts: Map<String, List<Debt>>): Map<String, Double> {
+    val out = linkedMapOf<String, Double>()
+    debts[Kind.LENT].orEmpty().forEach { out[it.person] = (out[it.person] ?: 0.0) + it.remaining }
+    debts[Kind.LOAN].orEmpty().forEach { out[it.person] = (out[it.person] ?: 0.0) - it.remaining }
+    return out
+}
 
 /** ফেরত/পরিশোধ এন্ট্রির লেবেল */
 fun repayLabel(kind: String): String = if (kind == Kind.LENT) "ফেরত নিছি" else "ফেরত দিয়েছি"
@@ -90,8 +107,9 @@ fun repayLabel(kind: String): String = if (kind == Kind.LENT) "ফেরত ন�
  * ভার্সন ৩: খাত টেবিল, বাকি-খরচ (debts.is_expense) এবং IFIC BANK নাম।
  * ভার্সন ৪: সম্পদের অধীনে ডিফল্ট "অন্যান্য" অ্যাকাউন্ট; অ্যাকাউন্ট ছাড়া লেনদেন এতেই জমা হয়।
  * ভার্সন ৫: খাতের নাম "ধার প্রদান" → "ধার দিছি", "লোন গ্রহণ" → "ধার নিছি"।
+ * ভার্সন ৬: নোট টেবিল।
  */
-class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5) {
+class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -123,6 +141,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5)
             Triple(OTHER_ACCOUNT, "asset", ""),
         )
         createCategories(db)
+        createNotes(db)
         seed.forEach { (name, type, icon) ->
             db.insert("accounts", null, ContentValues().apply {
                 put("name", name)
@@ -149,6 +168,35 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5)
             db.execSQL("UPDATE txns SET account_id = ? WHERE account_id = 0", arrayOf<Any>(id))
         }
         if (oldVersion < 5) renameDebtCategories(db)
+        if (oldVersion < 6) createNotes(db)
+    }
+
+    private fun createNotes(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "text TEXT NOT NULL, date TEXT NOT NULL)"
+        )
+    }
+
+    // ---------- নোট ----------
+    fun notes(): List<Note> =
+        readableDatabase.rawQuery("SELECT id, text, date FROM notes ORDER BY id DESC", null).use { c ->
+            buildList { while (c.moveToNext()) add(Note(c.getLong(0), c.getString(1), c.getString(2))) }
+        }
+
+    fun addNote(text: String) {
+        writableDatabase.insertOrThrow("notes", null, ContentValues().apply {
+            put("text", text)
+            put("date", LocalDateTime.now().toString())
+        })
+    }
+
+    fun updateNote(id: Long, text: String) {
+        writableDatabase.update("notes", ContentValues().apply { put("text", text) }, "id = ?", arrayOf(id.toString()))
+    }
+
+    fun deleteNote(id: Long) {
+        writableDatabase.delete("notes", "id = ?", arrayOf(id.toString()))
     }
 
     /** পুরনো খাতের নাম নতুন নামে বদলায় (আগের লেনদেন ও পুরনো এক্সেল ব্যাকআপ, দুইয়ের জন্যই) */
@@ -327,10 +375,53 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5)
         }
     }
 
-    private fun Cursor.toTxns(): List<Txn> = buildList {
-        while (moveToNext()) {
-            add(Txn(getLong(0), getString(1), getDouble(2), getString(3), getString(4), getString(5), getString(6)))
+    /** ধার-হিসাবের আইডি → ক্লিয়ার কি না (দিছি/নিছি: ব্যক্তির নিট ০; বাকি খরচ: বাকি ০) */
+    private fun clearedDebts(): Map<Long, Boolean> {
+        val rows = mutableListOf<Triple<Long, String, Pair<String, Double>>>() // (id, kind, (person, remaining))
+        readableDatabase.rawQuery(
+            """
+            SELECT d.id, d.kind, d.person,
+                   d.total - IFNULL((SELECT SUM(amount) FROM txns WHERE debt_id = d.id AND is_payment = 1), 0)
+            FROM debts d
+            """.trimIndent(),
+            null,
+        ).use { c ->
+            while (c.moveToNext()) rows += Triple(c.getLong(0), c.getString(1), c.getString(2) to c.getDouble(3))
         }
+        val nets = mutableMapOf<String, Double>()
+        rows.forEach { (_, kind, pr) ->
+            if (kind == Kind.LENT) nets[pr.first] = (nets[pr.first] ?: 0.0) + pr.second
+            else if (kind == Kind.LOAN) nets[pr.first] = (nets[pr.first] ?: 0.0) - pr.second
+        }
+        return rows.associate { (id, kind, pr) ->
+            id to if (kind == Kind.SHOP) pr.second <= 0.0001 else kotlin.math.abs(nets[pr.first] ?: 0.0) <= 0.0001
+        }
+    }
+
+    /** কলাম ০–৬ সাধারণ লেনদেন, ৭ = debt_id (ক্লিয়ার কি না জানতে) */
+    private fun Cursor.toTxns(cleared: Map<Long, Boolean>): List<Txn> = buildList {
+        while (moveToNext()) {
+            val debtId = if (isNull(7)) null else getLong(7)
+            add(
+                Txn(
+                    getLong(0), getString(1), getDouble(2), getString(3), getString(4), getString(5), getString(6),
+                    cleared = debtId != null && cleared[debtId] == true,
+                )
+            )
+        }
+    }
+
+    /** একটি অ্যাকাউন্টের সব লেনদেন (নতুন আগে) */
+    fun accountTxns(accountId: Long): List<Txn> {
+        val cleared = clearedDebts()
+        return readableDatabase.rawQuery(
+            """
+            SELECT t.id, t.type, t.amount, '', t.category, t.note, t.date, t.debt_id
+            FROM txns t WHERE t.account_id = ?
+            ORDER BY t.date DESC, t.id DESC
+            """.trimIndent(),
+            arrayOf(accountId.toString()),
+        ).use { c -> c.toTxns(cleared) }
     }
 
     /** লেনদেনের তালিকা (বাকি খরচসহ), তারিখ অনুযায়ী নতুন আগে: আজকের তারিখ সবার উপরে */
@@ -338,22 +429,30 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5)
         val where = if (category == null) "" else "WHERE t.category = ?"
         val args = if (category == null) null else arrayOf(category)
         val db = readableDatabase
+        val cleared = clearedDebts()
         val list = db.rawQuery(
             """
-            SELECT t.id, t.type, t.amount, IFNULL(a.name, ''), t.category, t.note, t.date
+            SELECT t.id, t.type, t.amount, IFNULL(a.name, ''), t.category, t.note, t.date, t.debt_id
             FROM txns t LEFT JOIN accounts a ON a.id = t.account_id
             $where
             """.trimIndent(),
             args,
-        ).use { c -> c.toTxns() }.toMutableList()
+        ).use { c -> c.toTxns(cleared) }.toMutableList()
         // বাকি খরচ: অ্যাকাউন্ট থেকে টাকা কাটেনি, তবু তালিকায় "বাকি" চিহ্নসহ থাকে
         val bakiWhere = if (category == null) "" else "AND category = ?"
         db.rawQuery(
-            "SELECT id, total, category, note, date FROM debts WHERE is_expense = 1 $bakiWhere",
+            """
+            SELECT id, total, category, note, date,
+                   total - IFNULL((SELECT SUM(amount) FROM txns WHERE debt_id = debts.id AND is_payment = 1), 0)
+            FROM debts WHERE is_expense = 1 $bakiWhere
+            """.trimIndent(),
             args,
         ).use { c ->
             while (c.moveToNext()) {
-                list += Txn(-c.getLong(0), "debit", c.getDouble(1), "", c.getString(2), c.getString(3), c.getString(4), baki = true)
+                list += Txn(
+                    -c.getLong(0), "debit", c.getDouble(1), "", c.getString(2), c.getString(3), c.getString(4),
+                    baki = true, cleared = c.getDouble(5) <= 0.0001,
+                )
             }
         }
         return list.sortedWith(compareByDescending<Txn> { it.date }.thenByDescending { it.id })
@@ -365,25 +464,35 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5)
             buildList { while (c.moveToNext()) add(c.getString(0)) }
         }
 
-    /** এক ব্যক্তির ধার নেওয়া/দেওয়া ও ফেরতের সব এন্ট্রি, তারিখ অনুযায়ী পুরনো আগে */
-    fun debtHistory(kind: String, person: String): List<HistoryItem> {
+    /**
+     * এক ব্যক্তির দেওয়া, নেওয়া ও ফেরতের সব এন্ট্রি একসাথে (একটানা খাতা), তারিখ অনুযায়ী পুরনো আগে।
+     * দিছি ও নিছি দুটোই মিলিয়ে আসে, তাই নিট হিসাব একই জায়গায় চলতে থাকে।
+     */
+    fun personHistory(person: String): List<HistoryItem> {
         val db = readableDatabase
         val out = mutableListOf<HistoryItem>()
-        val firstLabel = debtLabel(kind)
         db.rawQuery(
-            "SELECT date, total FROM debts WHERE kind = ? AND person = ?",
-            arrayOf(kind, person),
+            "SELECT date, total, kind FROM debts WHERE person = ? AND kind IN ('lent','loan')",
+            arrayOf(person),
         ).use { c ->
-            while (c.moveToNext()) out += HistoryItem(c.getString(0), firstLabel, c.getDouble(1), false)
+            while (c.moveToNext()) {
+                val kind = c.getString(2)
+                val amount = c.getDouble(1)
+                out += HistoryItem(c.getString(0), debtLabel(kind), amount, false, if (kind == Kind.LENT) amount else -amount)
+            }
         }
         db.rawQuery(
             """
-            SELECT t.date, t.amount FROM txns t JOIN debts d ON d.id = t.debt_id
-            WHERE d.kind = ? AND d.person = ? AND t.is_payment = 1
+            SELECT t.date, t.amount, d.kind FROM txns t JOIN debts d ON d.id = t.debt_id
+            WHERE d.person = ? AND d.kind IN ('lent','loan') AND t.is_payment = 1
             """.trimIndent(),
-            arrayOf(kind, person),
+            arrayOf(person),
         ).use { c ->
-            while (c.moveToNext()) out += HistoryItem(c.getString(0), repayLabel(kind), c.getDouble(1), true)
+            while (c.moveToNext()) {
+                val kind = c.getString(2)
+                val amount = c.getDouble(1)
+                out += HistoryItem(c.getString(0), repayLabel(kind), amount, true, if (kind == Kind.LENT) -amount else amount)
+            }
         }
         return out.sortedBy { it.date }
     }
@@ -554,26 +663,6 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5)
         }
     }
 
-    /** একটি ধার-হিসাবের সব এন্ট্রি (প্রথম ধার + প্রতিটি ফেরত/পরিশোধ), পুরনো আগে */
-    fun debtEntries(id: Long): List<HistoryItem> {
-        val db = readableDatabase
-        val out = mutableListOf<HistoryItem>()
-        var kind = Kind.LOAN
-        db.rawQuery("SELECT kind, date, total FROM debts WHERE id = ?", arrayOf(id.toString())).use { c ->
-            if (c.moveToFirst()) {
-                kind = c.getString(0)
-                out += HistoryItem(c.getString(1), debtLabel(kind), c.getDouble(2), false)
-            }
-        }
-        db.rawQuery(
-            "SELECT date, amount FROM txns WHERE debt_id = ? AND is_payment = 1",
-            arrayOf(id.toString()),
-        ).use { c ->
-            while (c.moveToNext()) out += HistoryItem(c.getString(0), repayLabel(kind), c.getDouble(1), true)
-        }
-        return out.sortedBy { it.date }
-    }
-
     /** শুধু এই হিসাবের নাম বদল (এর লেনদেনের নোটও বদলায়) */
     fun renameDebt(id: Long, newName: String) {
         writableDatabase.transaction {
@@ -673,6 +762,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 5)
             ),
         ),
         Triple("categories", "Categories", linkedMapOf("id" to 'L', "name" to 'S', "kind" to 'S')),
+        Triple("notes", "Notes", linkedMapOf("id" to 'L', "text" to 'S', "date" to 'S')),
     )
 
     private val nullableCols = setOf("debt_id", "ref")
