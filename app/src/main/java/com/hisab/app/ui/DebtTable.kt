@@ -1,5 +1,6 @@
 package com.hisab.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +24,7 @@ import com.hisab.app.data.fmtDate
  * আর পরিমাণ কলামের নিচে "মোট=..."।
  */
 @Composable
-fun DebtTable(person: String, entries: List<HistoryItem>) {
+fun DebtTable(person: String, entries: List<HistoryItem>, onEntryClick: ((HistoryItem) -> Unit)? = null) {
     val total = entries.sumOf { it.delta }
     val dateW = 1.05f
     val typeW = 1.1f
@@ -45,7 +46,10 @@ fun DebtTable(person: String, entries: List<HistoryItem>) {
         entries.forEach { h ->
             // ফেরত/পরিশোধের সারিতে তারিখ, ধরন ও পরিমাণ একই (সবুজ) রঙে
             val c = if (h.payment) Color(0xFF2E7D32) else Color.Unspecified
-            Row(Modifier.fillMaxWidth()) {
+            // লাইনে চাপলে (onEntryClick থাকলে) সেটি এডিট করা যায়
+            Row(
+                Modifier.fillMaxWidth().then(if (onEntryClick != null) Modifier.clickable { onEntryClick(h) } else Modifier),
+            ) {
                 Text(fmtDate(h.date), Modifier.weight(dateW), fontSize = 13.sp, color = c)
                 Text(h.label, Modifier.weight(typeW), fontSize = 13.sp, color = c)
                 Text(
