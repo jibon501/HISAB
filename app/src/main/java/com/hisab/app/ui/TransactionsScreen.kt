@@ -81,7 +81,6 @@ fun TransactionsScreen(vm: HisabViewModel) {
     var menu by remember { mutableStateOf(false) }
     var showCats by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<Txn?>(null) }
-    var toEdit by remember { mutableStateOf<Txn?>(null) }
 
     Scaffold(
         // উপরের স্ট্যাটাস বারের জায়গা আলাদা করে যোগ করা হয় না (নইলে দ্বিগুণ ফাঁকা হয়)
@@ -132,7 +131,7 @@ fun TransactionsScreen(vm: HisabViewModel) {
             } else {
                 // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি (+) বাটন ও মোটের নিচে ঢাকা না পড়ে
                 LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-                    itemsIndexed(vm.txns, key = { _, t -> t.id }) { i, t -> TxnRow(t, i, onEdit = { toEdit = t }) { toDelete = t } }
+                    itemsIndexed(vm.txns, key = { _, t -> t.id }) { i, t -> TxnRow(t, i) { toDelete = t } }
                 }
             }
             // স্ক্রিনে যা দেখা যাচ্ছে তার নিট মোট (জমা − খরচ): নিচে বামে, ছোট ও ধূসর
@@ -178,16 +177,6 @@ fun TransactionsScreen(vm: HisabViewModel) {
             onDismiss = { showCats = false },
         )
     }
-    toEdit?.let { t ->
-        EditTxnDialog(
-            txn = t,
-            onDismiss = { toEdit = null },
-            onSave = { amount, date ->
-                vm.editTxn(t.id, amount, date)
-                toEdit = null
-            },
-        )
-    }
     toDelete?.let { t ->
         AlertDialog(
             onDismissRequest = { toDelete = null },
@@ -206,7 +195,7 @@ private val DEBT_CATS = setOf("ধার নিছি", "ধার দিছি"
 
 /** ছোট, কাছাকাছি সারি; একটা পরপর হালকা ধূসর ব্যাকগ্রাউন্ড। অ্যাকাউন্টের নাম দেখানো হয় না */
 @Composable
-private fun TxnRow(t: Txn, index: Int, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun TxnRow(t: Txn, index: Int, onDelete: () -> Unit) {
     val credit = t.type == "credit"
     // ক্লিয়ার (শোধ হওয়া) লেনদেন: ধূসর ও কাটা দাগ
     val color = if (t.cleared) Color.Gray else if (credit) GREEN else RED
@@ -225,8 +214,7 @@ private fun TxnRow(t: Txn, index: Int, onEdit: () -> Unit, onDelete: () -> Unit)
             tint = color,
             modifier = Modifier.size(18.dp),
         )
-        // নামে (সারির লেখার অংশে) চাপলে তারিখ ও টাকার পরিমাণ এডিট করা যায়
-        Column(Modifier.weight(1f).clickable(onClick = onEdit).padding(start = 10.dp)) {
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(t.category, fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = base, textDecoration = deco)
                 if (t.baki) {
@@ -439,20 +427,26 @@ private fun AddTxnDialog(
     }
 }
 
-/** লেনদেনের তারিখ ও টাকার পরিমাণ এডিট (আজকের পরের তারিখ বাছা যায় না) */
+/** একটি লাইনের তারিখ ও টাকার পরিমাণ এডিট (আজকের পরের তারিখ বাছা যায় না); ধার-খাতা থেকে ব্যবহার হয় */
 @Composable
-private fun EditTxnDialog(txn: Txn, onDismiss: () -> Unit, onSave: (amount: Double, date: LocalDate) -> Unit) {
+internal fun EditEntryDialog(
+    title: String,
+    initialAmount: Double,
+    initialDate: String,
+    onDismiss: () -> Unit,
+    onSave: (amount: Double, date: LocalDate) -> Unit,
+) {
     val ctx = LocalContext.current
-    var amount by remember(txn.id) {
-        mutableStateOf(txn.amount.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() })
+    var amount by remember(initialAmount, initialDate) {
+        mutableStateOf(initialAmount.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() })
     }
-    var date by remember(txn.id) {
-        mutableStateOf(runCatching { LocalDate.parse(txn.date.take(10)) }.getOrDefault(LocalDate.now()))
+    var date by remember(initialAmount, initialDate) {
+        mutableStateOf(runCatching { LocalDate.parse(initialDate.take(10)) }.getOrDefault(LocalDate.now()))
     }
     var pickDate by remember { mutableStateOf(false) }
 
     FormDialog(
-        title = txn.category,
+        title = title,
         centerTitle = true,
         confirmText = "সংরক্ষণ",
         onDismiss = onDismiss,
