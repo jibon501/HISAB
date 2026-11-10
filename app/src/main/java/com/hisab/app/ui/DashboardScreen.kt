@@ -120,13 +120,19 @@ private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
     fun owed(kind: String) = vm.debts[kind].orEmpty()
         .groupBy { it.person }
         .map { (person, list) -> DRow(person, list.sumOf { it.remaining }, kind = kind) }
-        .filter { it.value > 0 } // ফেরত বেশি হলে (অতিরিক্ত) এই কার্ডে ধরা হয় না
+        .filter { it.value > 0 }
         .sortedByDescending { it.value }
+
+    // ফেরত বেশি হওয়া ব্যক্তিরা: অতিরিক্তটা উল্টো দিকের কার্ডে যোগ হয় (ট্যাপ করলে নিজের হিসাবই খোলে)
+    fun excess(kind: String) = vm.debts[kind].orEmpty()
+        .groupBy { it.person }
+        .map { (person, list) -> DRow(person, -list.sumOf { it.remaining }, kind = kind) }
+        .filter { it.value > 0.0001 }
 
     return when (d) {
         Detail.CASH -> accounts("cash", "mobile", "bank")
-        Detail.LOAN -> owed(Kind.LOAN)
-        Detail.LENT -> owed(Kind.LENT)
+        Detail.LOAN -> (owed(Kind.LOAN) + excess(Kind.LENT)).sortedByDescending { it.value }
+        Detail.LENT -> (owed(Kind.LENT) + excess(Kind.LOAN)).sortedByDescending { it.value }
         Detail.DPS -> accounts("dps")
         Detail.ASSET -> vm.accounts
             .filter { it.type !in ASSET_EXCLUDED_TYPES && it.name != OTHER_ACCOUNT && it.balance != 0.0 }
