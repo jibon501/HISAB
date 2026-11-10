@@ -38,6 +38,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import com.hisab.app.data.debtLabel
+import com.hisab.app.data.debtTotal
 import com.hisab.app.data.repayLabel
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,7 +106,7 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
                 // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি মোটের নিচে ঢাকা না পড়ে
                 LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
                     itemsIndexed(groups, key = { _, g -> g.person }) { i, g ->
-                        val done = g.remaining <= 0.0
+                        val done = g.remaining <= 0.0001
                         // এক লাইন পর পর হালকা ধূসর বক্স; বক্স লেখার চেয়ে সামান্য বড়
                         Row(
                             Modifier
@@ -128,23 +129,36 @@ fun DebtsScreen(vm: HisabViewModel, kind: String) {
                                 modifier = Modifier.weight(1f),
                                 fontSize = 15.sp,
                             )
+                            // ফেরত বেশি হলে অতিরিক্তটা উল্টো লেবেলে (কমলা রঙে)
+                            val over = g.remaining < -0.0001
                             Text(
-                                if (done) "পরিশোধিত ✓" else tk(g.remaining),
+                                when {
+                                    over -> debtTotal(kind, g.remaining).let { (l, a) -> "$l ${tk(a)}" }
+                                    done -> "পরিশোধিত ✓"
+                                    else -> tk(g.remaining)
+                                },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = if (done) Color(0xFF2E7D32) else Color(0xFFC62828),
+                                color = when {
+                                    over -> Color(0xFFEF6C00)
+                                    done -> Color(0xFF2E7D32)
+                                    else -> Color(0xFFC62828)
+                                },
                             )
                         }
                     }
                 }
             }
             // স্ক্রিনে যা দেখা যাচ্ছে তার মোট বাকি: নিচে বামে, ছোট ও ধূসর
-            Text(
-                "মোট: ${tk(list.sumOf { it.remaining })}",
-                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp),
-                fontSize = 12.sp,
-                color = Color.Gray,
-            )
+            // দিছি-তে "মোট দিয়েছি", নিছি-তে "মোট নিয়েছি"; ফেরত বেশি হওয়া ব্যক্তিদের অতিরিক্ত আলাদা লাইনে
+            val owedTotal = groups.sumOf { it.remaining.coerceAtLeast(0.0) }
+            val extraTotal = groups.sumOf { (-it.remaining).coerceAtLeast(0.0) }
+            Column(Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp)) {
+                Text("${debtTotal(kind, 0.0).first}: ${tk(owedTotal)}", fontSize = 12.sp, color = Color.Gray)
+                if (extraTotal > 0.0001) {
+                    Text("${debtTotal(kind, -1.0).first}: ${tk(extraTotal)}", fontSize = 12.sp, color = Color.Gray)
+                }
+            }
         }
     }
 
@@ -204,7 +218,7 @@ private fun DebtEditDialog(
         savedUri?.let { return it }
         return saveToGallery(
             ctx,
-            buildHistoryBitmap(debt.person, debtLabel(debt.kind), entries),
+            buildHistoryBitmap(debt.person, debt.kind, entries),
             "hisab_${debt.person}_${System.currentTimeMillis()}".replace(" ", "_"),
         ).also { savedUri = it }
     }
@@ -220,9 +234,8 @@ private fun DebtEditDialog(
     }
 
     fun share() {
-        val label = debtLabel(debt.kind)
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-            shareText(ctx, debt.person, label, entries)
+            shareText(ctx, debt.person, debt.kind, entries)
             return
         }
         val uri = ensureSaved()
@@ -234,7 +247,7 @@ private fun DebtEditDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 // শুধু দেখার অবস্থা: নাম মাঝখানে, তিন কলাম, নিচে মোট
-                DebtTable(debt.person, entries)
+                DebtTable(debt.person, debt.kind, entries)
             }
         },
         // বাটন: + | সেভ গ্যালারি | শেয়ার | মুছুন (চারটি এক লাইনে, তাই ফাঁকা কম)
@@ -303,7 +316,6 @@ private fun DebtAddScreen(
             when {
                 n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
                 splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
-                total > debt.remaining + 0.0001 -> ctx.toast("বাকির চেয়ে বেশি দেওয়া যাবে না")
                 else -> onSave(n, splits.map { (it.first as Account).id to it.second })
             }
         },

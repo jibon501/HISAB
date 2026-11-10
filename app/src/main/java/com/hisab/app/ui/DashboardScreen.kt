@@ -118,9 +118,9 @@ private fun rowsFor(d: Detail, vm: HisabViewModel): List<DRow> {
 
     // একই নামের একাধিক হিসাব যোগ করে মোট দেখায়
     fun owed(kind: String) = vm.debts[kind].orEmpty()
-        .filter { it.remaining > 0 }
         .groupBy { it.person }
         .map { (person, list) -> DRow(person, list.sumOf { it.remaining }, kind = kind) }
+        .filter { it.value > 0 } // ফেরত বেশি হলে (অতিরিক্ত) এই কার্ডে ধরা হয় না
         .sortedByDescending { it.value }
 
     return when (d) {
@@ -218,7 +218,7 @@ private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, 
         onDismissRequest = onDismiss,
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                DebtTable(person, items)
+                DebtTable(person, kind, items)
             }
         },
         // বক্সের বাইরে চাপলে বা ব্যাক দিলে বন্ধ হয়, আলাদা বাটন নেই

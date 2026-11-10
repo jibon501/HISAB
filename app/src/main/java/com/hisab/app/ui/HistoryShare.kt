@@ -13,10 +13,12 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.hisab.app.data.HistoryItem
+import com.hisab.app.data.debtLabel
+import com.hisab.app.data.debtTotal
 import com.hisab.app.data.fmtDate
 
 /** একজনের ধার-হিসাবের ছবি বানায়: নাম, প্রতিটি এন্ট্রি ও নিচে বাকি */
-fun buildHistoryBitmap(person: String, kindLabel: String, items: List<HistoryItem>): Bitmap {
+fun buildHistoryBitmap(person: String, kind: String, items: List<HistoryItem>): Bitmap {
     val width = 720
     val pad = 40f
     val rowH = 72f
@@ -54,7 +56,8 @@ fun buildHistoryBitmap(person: String, kindLabel: String, items: List<HistoryIte
     }
 
     c.drawLine(pad, y - rowH + 28f, width - pad, y - rowH + 28f, line)
-    val rest = "মোট=${tk(remaining)}"
+    val (totalLabel, totalAmount) = debtTotal(kind, remaining)
+    val rest = "$totalLabel=${tk(totalAmount)}"
     c.drawText(rest, width - pad - bold.measureText(rest), y + 20f, bold)
     return bmp
 }
@@ -97,15 +100,16 @@ fun shareImage(ctx: Context, uri: Uri) {
 }
 
 /** পুরনো ফোনের জন্য: ছবির বদলে লেখা আকারে শেয়ার */
-fun shareText(ctx: Context, person: String, kindLabel: String, items: List<HistoryItem>) {
+fun shareText(ctx: Context, person: String, kind: String, items: List<HistoryItem>) {
     var remaining = 0.0
     val body = buildString {
-        appendLine("$person • $kindLabel")
+        appendLine("$person • ${debtLabel(kind)}")
         items.forEach { h ->
             remaining += if (h.payment) -h.amount else h.amount
             appendLine("${fmtDate(h.date)}  ${h.label}  ${tk(h.amount)}")
         }
-        append("মোট=${tk(remaining)}")
+        val (totalLabel, totalAmount) = debtTotal(kind, remaining)
+        append("$totalLabel=${tk(totalAmount)}")
     }
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"

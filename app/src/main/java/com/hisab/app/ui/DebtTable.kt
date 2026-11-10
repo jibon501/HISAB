@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hisab.app.data.HistoryItem
+import com.hisab.app.data.debtTotal
 import com.hisab.app.data.fmtDate
 
 /**
@@ -22,7 +23,7 @@ import com.hisab.app.data.fmtDate
  * আর পরিমাণ কলামের নিচে "মোট=..."।
  */
 @Composable
-fun DebtTable(person: String, entries: List<HistoryItem>) {
+fun DebtTable(person: String, kind: String, entries: List<HistoryItem>) {
     val total = entries.sumOf { if (it.payment) -it.amount else it.amount }
     val dateW = 1.05f
     val typeW = 1.1f
@@ -59,7 +60,9 @@ fun DebtTable(person: String, entries: List<HistoryItem>) {
         }
         HorizontalDivider()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text("মোট=${tk(total)}", fontWeight = FontWeight.Bold)
+            // ফেরত বেশি হলে অতিরিক্তটা উল্টো দিকের লেবেলে (যেমন "আমার কাছে পাবে")
+            val (label, amount) = debtTotal(kind, total)
+            Text("$label=${tk(amount)}", fontWeight = FontWeight.Bold)
         }
     }
 }
