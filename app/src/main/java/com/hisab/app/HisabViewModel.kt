@@ -76,12 +76,15 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         val debtMap = listOf(Kind.LOAN, Kind.LENT, Kind.SHOP).associateWith { db.debts(it) }
         val month = db.monthItems()
         fun sum(vararg types: String) = accs.filter { it.type in types }.sumOf { it.balance }
-        // দিছি/নিছি: একই ব্যক্তির সব হিসাব মিলিয়ে বাকি; ফেরত বেশি হলে (ঋণাত্মক) ধরা হয় না
+        // দিছি/নিছি: একই ব্যক্তির সব হিসাব মিলিয়ে বাকি (ফেরত বেশি হলে এটা ০)
         fun owed(kind: String): Double {
             val list = debtMap[kind].orEmpty()
             return if (kind == Kind.SHOP) list.sumOf { it.remaining }
             else list.groupBy { it.person }.values.sumOf { g -> g.sumOf { it.remaining }.coerceAtLeast(0.0) }
         }
+        // ফেরত বেশি হলে অতিরিক্তটা উল্টো দিকে গণ্য: দিছি-র অতিরিক্ত = নেওয়া, নিছি-র অতিরিক্ত = দেওয়া
+        fun excess(kind: String): Double =
+            debtMap[kind].orEmpty().groupBy { it.person }.values.sumOf { g -> (-g.sumOf { it.remaining }).coerceAtLeast(0.0) }
         return Snapshot(
             accounts = accs,
             txns = db.txns(filter),
@@ -91,8 +94,8 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
             debts = debtMap,
             summary = Summary(
                 cash = sum("cash", "mobile", "bank"),
-                loan = owed(Kind.LOAN),
-                lent = owed(Kind.LENT),
+                loan = owed(Kind.LOAN) + excess(Kind.LENT),
+                lent = owed(Kind.LENT) + excess(Kind.LOAN),
                 shop = owed(Kind.SHOP),
                 dps = sum("dps"),
                 asset = accs
