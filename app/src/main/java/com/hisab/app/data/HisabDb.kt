@@ -66,6 +66,7 @@ data class HistoryItem(
     val amount: Double,
     val payment: Boolean,
     val delta: Double,
+    val accountId: Long? = null, // কোন অ্যাকাউন্টে জমা/কাটা (একাধিক ভাগ থাকলে null)
     val ref: Long = 0, // এডিটের জন্য: ফেরত হলে লেনদেনের আইডি (+), ধার/দেওয়ার প্রথম এন্ট্রি হলে −(হিসাবের আইডি)
 )
 
@@ -479,18 +480,23 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
         val db = readableDatabase
         val out = mutableListOf<HistoryItem>()
         db.rawQuery(
-            "SELECT date, total, kind, id FROM debts WHERE person = ? AND kind IN ('lent','loan')",
+            """
+            SELECT date, total, kind, id,
+                   (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(account_id) END
+                    FROM txns WHERE debt_id = debts.id AND is_payment = 0)
+            FROM debts WHERE person = ? AND kind IN ('lent','loan')
+            """.trimIndent(),
             arrayOf(person),
         ).use { c ->
             while (c.moveToNext()) {
                 val kind = c.getString(2)
                 val amount = c.getDouble(1)
-                out += HistoryItem(c.getString(0), debtLabel(kind), amount, false, if (kind == Kind.LENT) amount else -amount, -c.getLong(3))
+                out += HistoryItem(c.getString(0), debtLabel(kind), amount, false, if (kind == Kind.LENT) amount else -amount, if (c.isNull(4)) null else c.getLong(4), -c.getLong(3))
             }
         }
         db.rawQuery(
             """
-            SELECT t.date, t.amount, d.kind, t.id FROM txns t JOIN debts d ON d.id = t.debt_id
+            SELECT t.date, t.amount, d.kind, t.id, t.account_id FROM txns t JOIN debts d ON d.id = t.debt_id
             WHERE d.person = ? AND d.kind IN ('lent','loan') AND t.is_payment = 1
             """.trimIndent(),
             arrayOf(person),
@@ -498,7 +504,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
             while (c.moveToNext()) {
                 val kind = c.getString(2)
                 val amount = c.getDouble(1)
-                out += HistoryItem(c.getString(0), repayLabel(kind), amount, true, if (kind == Kind.LENT) -amount else amount, c.getLong(3))
+                out += HistoryItem(c.getString(0), repayLabel(kind), amount, true, if (kind == Kind.LENT) -amount else amount, c.getLong(4), c.getLong(3))
             }
         }
         return out.sortedBy { it.date }
@@ -514,7 +520,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
      * লেনদেনের পরিমাণ ও তারিখ বদল। id ঋণাত্মক হলে বাকি খরচ।
      * ট্রান্সফারের দুই দিকই বদলায়; ধারের মূল লেনদেন বদলালে ধারের মোট ও তারিখও মিলিয়ে দেওয়া হয়।
      */
-    fun updateTxn(id: Long, amount: Double, date: LocalDate) {
+    fun updateTxn(id: Long, amount: Double, date: LocalDate, accountId: Long? = null) {
         writableDatabase.transaction<Unit> {
             if (id < 0) {
                 val debtId = (-id).toString()
@@ -536,7 +542,11 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
             val ref = row[0]
             val debtId = row[1]
             val isPayment = row[2] == "1"
-            val v = ContentValues().apply { put("amount", amount); put("date", withDate(row[3], date)) }
+            val v = ContentValues().apply {
+                put("amount", amount)
+                put("date", withDate(row[3], date))
+                if (accountId != null && ref == null) put("account_id", accountId)
+            }
             if (ref != null) update("txns", v, "ref = ?", arrayOf(ref))
             else update("txns", v, "id = ?", arrayOf(id.toString()))
             if (debtId != null && !isPayment) {
@@ -592,7 +602,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
      * ধার-খাতার প্রথম এন্ট্রি (দেওয়া/নেওয়া) এডিট: মোট ও তারিখ বদলায়।
      * একাধিক অ্যাকাউন্টে ভাগ থাকলে ভাগগুলো আগের অনুপাতেই নতুন মোটে মেলানো হয়।
      */
-    fun updateDebtEntry(debtId: Long, amount: Double, date: LocalDate) {
+    fun updateDebtEntry(debtId: Long, amount: Double, date: LocalDate, accountId: Long? = null) {
         writableDatabase.transaction<Unit> {
             val id = debtId.toString()
             val oldDate = rawQuery("SELECT date FROM debts WHERE id = ?", arrayOf(id)).use { c ->
@@ -608,7 +618,12 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
                 val share = if (old > 0) amount * a / old else amount / parts.size
                 update(
                     "txns",
-                    ContentValues().apply { put("amount", share); put("date", newDate) },
+                    ContentValues().apply {
+                        put("amount", share)
+                        put("date", newDate)
+                        // অ্যাকাউন্ট শুধু তখনই বদলায় যখন একটিমাত্র ভাগ আছে
+                        if (accountId != null && parts.size == 1) put("account_id", accountId)
+                    },
                     "id = ?", arrayOf(tid.toString()),
                 )
             }
