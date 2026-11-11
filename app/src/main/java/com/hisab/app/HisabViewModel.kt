@@ -173,8 +173,11 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
     fun editTxn(id: Long, amount: Double, date: java.time.LocalDate) = exec { db.updateTxn(id, amount, date) }
 
     /** ধার-খাতার একটি লাইন এডিট: ref ঋণাত্মক = দেওয়া/নেওয়ার প্রথম এন্ট্রি, ধনাত্মক = ফেরতের লেনদেন */
-    fun editHistoryEntry(ref: Long, amount: Double, date: java.time.LocalDate) =
-        exec { if (ref < 0) db.updateDebtEntry(-ref, amount, date) else db.updateTxn(ref, amount, date) }
+    fun editHistoryEntry(ref: Long, amount: Double, date: java.time.LocalDate, accountId: Long?) =
+        exec { if (ref < 0) db.updateDebtEntry(-ref, amount, date, accountId) else db.updateTxn(ref, amount, date, accountId) }
+
+    /** PDF এক্সপোর্টের জন্য: খাত অনুযায়ী (null = সব) লেনদেন, স্ক্রিনের মতোই সাজানো */
+    fun txnsFor(category: String?): List<Txn> = db.txns(category)
 
     fun transfer(fromId: Long, toId: Long, amount: Double) =
         exec { db.transfer(fromId, toId, amount) }
