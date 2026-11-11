@@ -66,7 +66,8 @@ fun DebtTable(person: String, entries: List<HistoryItem>, onEntryClick: ((Histor
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             // দেওয়া ও নেওয়া মিলিয়ে নিট: নেওয়া বেশি হলে অতিরিক্তটা "মোট নিয়েছি"
             val (label, amount) = debtTotal(total)
-            Text("$label=${tk(amount)}", fontWeight = FontWeight.Bold)
+            if (kotlin.math.abs(total) <= 0.0001) Text("সমস্ত দেনা-পাওনা ক্লিয়ার", fontWeight = FontWeight.Bold)
+            else Text("$label=${tk(amount)}", fontWeight = FontWeight.Bold)
         }
     }
 }

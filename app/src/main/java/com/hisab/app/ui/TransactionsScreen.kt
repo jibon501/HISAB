@@ -68,6 +68,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.PictureAsPdf
 import com.hisab.app.data.Account
 import com.hisab.app.data.Txn
 
@@ -81,6 +85,23 @@ fun TransactionsScreen(vm: HisabViewModel) {
     var menu by remember { mutableStateOf(false) }
     var showCats by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<Txn?>(null) }
+    var showPdf by remember { mutableStateOf(false) }
+    // PDF-এর জন্য বাছা খাত ও মাস (ফাইল বাছাইয়ের পর কাজে লাগে)
+    var pdfOpts by remember { mutableStateOf<Pair<String?, String?>>(null to null) }
+    val ctx = LocalContext.current
+    val pdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val (cat, month) = pdfOpts
+            val list = vm.txnsFor(cat).filter { month == null || it.date.startsWith(month) }
+            val sub = "খাত: ${cat ?: "সব"} • মাস: ${month?.let { monthLabel(it) } ?: "সব"}"
+            val ok = runCatching {
+                ctx.contentResolver.openOutputStream(uri)!!.use { TxnPdf.write(it, "লগবুক", sub, list) }
+            }.isSuccess
+            ctx.toast(if (ok) "PDF এক্সপোর্ট হয়েছে" else "PDF করা গেল না")
+        }
+    }
 
     Scaffold(
         // উপরের স্ট্যাটাস বারের জায়গা আলাদা করে যোগ করা হয় না (নইলে দ্বিগুণ ফাঁকা হয়)
@@ -90,6 +111,10 @@ fun TransactionsScreen(vm: HisabViewModel) {
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text(vm.filter ?: "") },
                 actions = {
+                    // PDF: স্ক্রিনে যেভাবে দেখায় সেভাবে; খাত ও মাস অনুযায়ী
+                    IconButton(onClick = { showPdf = true }) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF এক্সপোর্ট")
+                    }
                     IconButton(onClick = { showCats = true }) {
                         Icon(Icons.Default.Category, contentDescription = "খাত")
                     }
@@ -168,6 +193,17 @@ fun TransactionsScreen(vm: HisabViewModel) {
             },
         )
     }
+    if (showPdf) {
+        PdfDialog(
+            vm = vm,
+            onDismiss = { showPdf = false },
+            onExport = { cat, month ->
+                pdfOpts = cat to month
+                showPdf = false
+                pdfLauncher.launch("logbook-${LocalDate.now()}.pdf")
+            },
+        )
+    }
     if (showCats) {
         CategoriesDialog(
             categories = vm.categories,
@@ -191,7 +227,7 @@ fun TransactionsScreen(vm: HisabViewModel) {
 }
 
 /** যে খাতের সারিতে ব্যক্তির নাম (কার থেকে নেওয়া / কাকে দেওয়া) ছোট করে দেখানো হয় */
-private val DEBT_CATS = setOf("ধার নিছি", "ধার দিছি", "লোন পরিশোধ", "ধার ফেরত", "দোকান বাকি পরিশোধ")
+internal val DEBT_CATS = setOf("ধার নিছি", "ধার দিছি", "লোন পরিশোধ", "ধার ফেরত", "দোকান বাকি পরিশোধ")
 
 /** ছোট, কাছাকাছি সারি; একটা পরপর হালকা ধূসর ব্যাকগ্রাউন্ড। অ্যাকাউন্টের নাম দেখানো হয় না */
 @Composable
@@ -434,9 +470,13 @@ internal fun EditEntryDialog(
     initialAmount: Double,
     initialDate: String,
     onDismiss: () -> Unit,
-    onSave: (amount: Double, date: LocalDate) -> Unit,
+    accounts: List<Account> = emptyList(),
+    initialAccountId: Long? = null, // null হলে (একাধিক ভাগ) অ্যাকাউন্ট বদলানো যায় না
+    accountLabel: String = "অ্যাকাউন্ট",
+    onSave: (amount: Double, date: LocalDate, accountId: Long?) -> Unit,
 ) {
     val ctx = LocalContext.current
+    var account by remember(initialAccountId) { mutableStateOf(accounts.firstOrNull { it.id == initialAccountId }) }
     var amount by remember(initialAmount, initialDate) {
         mutableStateOf(initialAmount.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() })
     }
@@ -452,10 +492,19 @@ internal fun EditEntryDialog(
         onDismiss = onDismiss,
         onConfirm = {
             val a = amount.toDoubleOrNull()
-            if (a == null || a <= 0) ctx.toast("সঠিক পরিমাণ দিন") else onSave(a, date)
+            if (a == null || a <= 0) ctx.toast("সঠিক পরিমাণ দিন") else onSave(a, date, account?.id)
         },
     ) {
         MoneyField(amount) { amount = it }
+        if (account != null) {
+            Picker(
+                label = accountLabel,
+                options = accounts,
+                selected = account,
+                text = { "${it.name} (${tk(it.balance)})" },
+                fieldText = { it.name },
+            ) { account = it }
+        }
         OutlinedButton(onClick = { pickDate = true }, modifier = Modifier.fillMaxWidth()) {
             Text("তারিখ: ${fmtDate(date.toString())}")
         }
@@ -485,4 +534,55 @@ internal fun EditEntryDialog(
             DatePicker(state = state)
         }
     }
+}
+
+private val MONTHS_BN = listOf(
+    "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
+    "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর",
+)
+
+/** "2026-11" → "নভেম্বর ২০২৬" */
+private fun monthLabel(ym: String): String {
+    val p = ym.split("-")
+    val m = p.getOrNull(1)?.toIntOrNull() ?: return ym
+    val year = p[0].map { if (it in '0'..'9') '\u09E6' + (it - '0') else it }.joinToString("")
+    return "${MONTHS_BN[(m - 1).coerceIn(0, 11)]} $year"
+}
+
+/** PDF এক্সপোর্টের অপশন: খাত ও মাস (দুটোই "সব" রাখা যায়) */
+@Composable
+private fun PdfDialog(vm: HisabViewModel, onDismiss: () -> Unit, onExport: (category: String?, month: String?) -> Unit) {
+    val allCat = "সব খাত"
+    val allMonth = "সব মাস"
+    val months = remember { vm.txnsFor(null).map { it.date.take(7) }.distinct().sortedDescending() }
+    var cat by remember { mutableStateOf(vm.filter ?: allCat) }
+    var month by remember { mutableStateOf(allMonth) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("PDF এক্সপোর্ট") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Picker(
+                    label = "খাত",
+                    options = listOf(allCat) + vm.usedCategories,
+                    selected = cat,
+                    text = { it },
+                ) { cat = it }
+                Picker(
+                    label = "মাস",
+                    options = listOf(allMonth) + months.map { monthLabel(it) },
+                    selected = month,
+                    text = { it },
+                ) { month = it }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val key = months.firstOrNull { monthLabel(it) == month }
+                onExport(if (cat == allCat) null else cat, key)
+            }) { Text("এক্সপোর্ট") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("বাতিল") } },
+    )
 }

@@ -187,14 +187,17 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
                     }
                 }
             }
-            // স্ক্রিনে যা দেখা যাচ্ছে তার মোট: দিছি-তে "মোট দিয়েছি", নিছি-তে "মোট নিয়েছি"
+            // স্ক্রিনে যা দেখা যাচ্ছে তার মোট: দিছি-তে "মোট দিয়েছি", নিছি-তে "মোট নিয়েছি"; মোট ০ হলে সব ক্লিয়ার
             val total = rows.sumOf { if (lent) it.net.coerceAtLeast(0.0) else (-it.net).coerceAtLeast(0.0) }
-            Text(
-                "${if (lent) "মোট দিয়েছি" else "মোট নিয়েছি"}: ${tk(total)}",
-                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp),
-                fontSize = 12.sp,
-                color = Color.Gray,
-            )
+            if (rows.isNotEmpty()) {
+                Text(
+                    if (total <= eps) "সমস্ত দেনা-পাওনা ক্লিয়ার"
+                    else "${if (lent) "মোট দিয়েছি" else "মোট নিয়েছি"}: ${tk(total)}",
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp),
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                )
+            }
         }
     }
 
@@ -226,7 +229,8 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
                 vm.savePersonEdit(r.person, name, payKind, splits)
                 editPerson = null
             },
-            onEditEntry = { ref, amount, date -> vm.editHistoryEntry(ref, amount, date) },
+            allAccounts = vm.accounts,
+            onEditEntry = { ref, amount, date, accountId -> vm.editHistoryEntry(ref, amount, date, accountId) },
             onDelete = {
                 vm.deletePerson(r.person)
                 editPerson = null
@@ -249,7 +253,8 @@ private fun DebtEditDialog(
     accounts: List<Account>,
     onDismiss: () -> Unit,
     onSave: (name: String, splits: List<Pair<Long, Double>>) -> Unit,
-    onEditEntry: (ref: Long, amount: Double, date: java.time.LocalDate) -> Unit,
+    allAccounts: List<Account>, // লাইন এডিটে অ্যাকাউন্ট বদলানোর জন্য
+    onEditEntry: (ref: Long, amount: Double, date: java.time.LocalDate, accountId: Long?) -> Unit,
     onDelete: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -318,8 +323,12 @@ private fun DebtEditDialog(
             initialAmount = h.amount,
             initialDate = h.date,
             onDismiss = { editingEntry = null },
-            onSave = { amount, date ->
-                onEditEntry(h.ref, amount, date)
+            accounts = allAccounts,
+            initialAccountId = h.accountId,
+            // জমা (delta < 0) নাকি দেওয়া/কাটা (delta > 0)
+            accountLabel = if (h.delta < 0) "কোন অ্যাকাউন্টে জমা হলো" else "কোন অ্যাকাউন্ট থেকে দেওয়া হলো",
+            onSave = { amount, date, accountId ->
+                onEditEntry(h.ref, amount, date, accountId)
                 editingEntry = null
             },
         )
