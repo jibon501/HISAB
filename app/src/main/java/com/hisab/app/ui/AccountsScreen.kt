@@ -3,6 +3,11 @@
 package com.hisab.app.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,7 +76,7 @@ fun AccountsScreen(vm: HisabViewModel) {
             }
         },
     ) { pad ->
-        LazyColumn(Modifier.padding(pad)) {
+        LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(bottom = 88.dp)) {
             item(key = "excel_bar") { ExcelBar(vm) { showTransfer = true } }
             typeOrder.forEach { type ->
                 val label = typeLabel(type)
@@ -80,21 +85,36 @@ fun AccountsScreen(vm: HisabViewModel) {
                     item(key = "h_$type") {
                         Text(
                             label,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = Slate500,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
+                            modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 6.dp),
                         )
                     }
                     items(group, key = { it.id }) { a ->
-                        ListItem(
-                            // চাপলে এই অ্যাকাউন্টের সব লেনদেন দেখায়
-                            modifier = Modifier.clickable { viewing = a },
-                            leadingContent = { AccountAvatar(a) },
-                            headlineContent = { Text(a.name) },
-                            trailingContent = {
-                                Text(tk(a.balance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                            },
-                        )
+                        // সাদা ঘেরা গোল-কোণা কার্ড; চাপলে এই অ্যাকাউন্টের সব লেনদেন দেখায়
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                                .clickable { viewing = a },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Slate200),
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                AccountAvatar(a)
+                                Text(a.name, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, color = Slate900)
+                                Text(
+                                    tk(a.balance),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    color = if (a.balance < 0) Red600 else Emerald700,
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,8 +81,10 @@ private val RED = Color(0xFFC62828)
 
 /** আয়-ব্যয়ের তালিকা, খাত অনুযায়ী ফিল্টার ও ট্রান্সফার */
 @Composable
-fun TransactionsScreen(vm: HisabViewModel) {
+fun TransactionsScreen(vm: HisabViewModel, addTick: Int = 0) {
     var showAdd by remember { mutableStateOf(false) }
+    // উপরের "নতুন লেনদেন" বাটন চাপলে ফর্ম খোলে
+    LaunchedEffect(addTick) { if (addTick > 0) showAdd = true }
     var menu by remember { mutableStateOf(false) }
     var showCats by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<Txn?>(null) }
