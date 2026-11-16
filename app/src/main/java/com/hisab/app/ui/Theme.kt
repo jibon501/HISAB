@@ -1,16 +1,9 @@
 package com.hisab.app.ui
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import com.hisab.app.R
 
 // ---------- রঙের পাতা (স্লেট + পান্না সবুজ ডিজাইন) ----------
 val Slate50 = Color(0xFFF8FAFC)
@@ -89,43 +82,11 @@ private val HisabColors = lightColorScheme(
     surfaceContainerHighest = Slate100,
 )
 
-/** হিন্দ শিলিগুড়ি ফন্ট: বাংলা লেখা সব ফোনে একই রকম সুন্দর দেখায় */
-val HindSiliguri = FontFamily(
-    Font(R.font.hind_siliguri, FontWeight.Normal),
-    Font(R.font.hind_siliguri, FontWeight.Medium),
-    Font(R.font.hind_siliguri_semibold, FontWeight.SemiBold),
-    Font(R.font.hind_siliguri_bold, FontWeight.Bold),
-    Font(R.font.hind_siliguri_bold, FontWeight.ExtraBold),
-)
-
-private fun TextStyle.hind() = copy(fontFamily = HindSiliguri)
-
-private val HisabTypography = Typography().let { t ->
-    Typography(
-        displayLarge = t.displayLarge.hind(),
-        displayMedium = t.displayMedium.hind(),
-        displaySmall = t.displaySmall.hind(),
-        headlineLarge = t.headlineLarge.hind(),
-        headlineMedium = t.headlineMedium.hind(),
-        headlineSmall = t.headlineSmall.hind(),
-        titleLarge = t.titleLarge.hind().copy(fontWeight = FontWeight.Bold, fontSize = 18.sp),
-        titleMedium = t.titleMedium.hind().copy(fontWeight = FontWeight.Bold, fontSize = 16.sp),
-        titleSmall = t.titleSmall.hind().copy(fontWeight = FontWeight.SemiBold),
-        bodyLarge = t.bodyLarge.hind().copy(fontSize = 14.sp, lineHeight = 20.sp),
-        bodyMedium = t.bodyMedium.hind().copy(fontSize = 13.sp, lineHeight = 18.sp),
-        bodySmall = t.bodySmall.hind(),
-        labelLarge = t.labelLarge.hind().copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
-        labelMedium = t.labelMedium.hind().copy(fontWeight = FontWeight.SemiBold),
-        labelSmall = t.labelSmall.hind(),
-    )
-}
-
-/** স্লেট-পান্না রঙের হালকা থিম ও হিন্দ শিলিগুড়ি ফন্ট */
+/** স্লেট-পান্না রঙের হালকা থিম (ফন্ট সিস্টেমের ডিফল্ট) */
 @Composable
 fun HisabTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = HisabColors,
-        typography = HisabTypography,
         content = content,
     )
 }
