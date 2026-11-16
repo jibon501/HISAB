@@ -1,6 +1,12 @@
 package com.hisab.app.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -76,18 +82,29 @@ fun DashboardScreen(vm: HisabViewModel) {
     var paying by remember { mutableStateOf<Long?>(null) } // বাকি খরচের debt id
 
     LazyColumn(
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { SummaryCard("ক্যাশ", s.cash, Color(0xFF00897B), Icons.Default.Payments, big = true) { detail = Detail.CASH } }
-        item { SummaryCard("ধার দেওয়া", s.lent, Color(0xFF43A047), Icons.Default.TrendingUp) { detail = Detail.LENT } }
-        item { SummaryCard("ধার নেওয়া", s.loan, Color(0xFFE53935), Icons.Default.TrendingDown) { detail = Detail.LOAN } }
-        item { SummaryCard("এই মাসের খরচ", s.monthExpense, Color(0xFF8E24AA), Icons.Default.ShoppingCart) { detail = Detail.EXPENSE } }
-        item { SummaryCard("ডিপিএস মোট", s.dps, Color(0xFF3949AB), Icons.Default.Savings) { detail = Detail.DPS } }
-        item { SummaryCard("সম্পদ", s.asset, Color(0xFF8D6E63), Icons.Default.Landscape) { detail = Detail.ASSET } }
+        // বড় সবুজ গ্রেডিয়েন্ট কার্ড: ক্যাশ
+        item { HeroCashCard(s.cash) { detail = Detail.CASH } }
+        // ধার দেওয়া / ধার নেওয়া পাশাপাশি
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SummaryCard("ধার দেওয়া", s.lent, Emerald600, Emerald50, Icons.Default.TrendingUp, Modifier.weight(1f)) { detail = Detail.LENT }
+                SummaryCard("ধার নেওয়া", s.loan, Red600, Red50, Icons.Default.TrendingDown, Modifier.weight(1f)) { detail = Detail.LOAN }
+            }
+        }
+        item { SummaryCard("এই মাসের খরচ", s.monthExpense, Purple600, Purple50, Icons.Default.ShoppingCart, Modifier.fillMaxWidth()) { detail = Detail.EXPENSE } }
+        // ডিপিএস / সম্পদ পাশাপাশি
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SummaryCard("ডিপিএস মোট", s.dps, Indigo600, Indigo50, Icons.Default.Savings, Modifier.weight(1f)) { detail = Detail.DPS }
+                SummaryCard("সম্পদ", s.asset, Amber700, Amber50, Icons.Default.Landscape, Modifier.weight(1f)) { detail = Detail.ASSET }
+            }
+        }
         // "অন্যান্য" অ্যাকাউন্টের ব্যালেন্স ০ হলে কার্ডটি দেখানো হয় না
         if (s.other != 0.0) {
-            item { SummaryCard("অন্যান্য", s.other, Color(0xFF546E7A), Icons.Default.MoreHoriz) { detail = Detail.OTHER } }
+            item { SummaryCard("অন্যান্য", s.other, Slate600, Slate100, Icons.Default.MoreHoriz, Modifier.fillMaxWidth()) { detail = Detail.OTHER } }
         }
     }
 
@@ -302,36 +319,56 @@ private fun PayBakiDialog(vm: HisabViewModel, debtId: Long, onDone: () -> Unit) 
     }
 }
 
+/** ক্যাশের বড় কার্ড: পান্না → টিল গ্রেডিয়েন্ট, সাদা লেখা */
+@Composable
+private fun HeroCashCard(value: Double, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(Emerald800, Teal700)))
+            .clickable(onClick = onClick)
+            .padding(20.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("ক্যাশ ব্যালেন্স", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Emerald100)
+                Text(tk(value), fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                Text("বিস্তারিত দেখতে ট্যাপ করুন", fontSize = 11.sp, color = Emerald200)
+            }
+            Box(
+                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Payments, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp)) }
+        }
+    }
+}
+
+/** সাদা ঘেরা কার্ড: নরম রঙের আইকন বক্স, শিরোনাম ও রঙিন অঙ্ক */
 @Composable
 private fun SummaryCard(
     title: String,
     value: Double,
     color: Color,
+    soft: Color,
     icon: ImageVector,
-    big: Boolean = false,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.14f)),
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Slate200),
     ) {
-        // আইকন ও লেখা কার্ডের মাঝখানে
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(if (big) 40.dp else 30.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(title, fontSize = 14.sp, textAlign = TextAlign.Center)
-                Text(
-                    tk(value),
-                    fontSize = if (big) 28.sp else 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = color,
-                    textAlign = TextAlign.Center,
-                )
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(soft),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp)) }
+            Column {
+                Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Slate500)
+                Text(tk(value), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
             }
         }
     }
