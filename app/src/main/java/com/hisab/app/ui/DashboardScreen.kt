@@ -1,6 +1,8 @@
 package com.hisab.app.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -90,30 +92,27 @@ fun DashboardScreen(vm: HisabViewModel, isCurrent: Boolean = true) {
     var history by remember { mutableStateOf<Pair<String, String>?>(null) } // (ধরন, নাম)
     var paying by remember { mutableStateOf<Long?>(null) } // বাকি খরচের debt id
 
-    LazyColumn(
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+    // স্ক্রল নেই: সব কার্ড স্ক্রিনের উচ্চতা ভাগ করে নেয় (weight)
+    Column(
+        Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // বড় সবুজ গ্রেডিয়েন্ট কার্ড: ক্যাশ
-        item { HeroCashCard(s.cash, isCurrent) }
+        // বড় সবুজ গ্রেডিয়েন্ট কার্ড (আয়াত / ক্যাশ ব্যালেন্স)
+        HeroCashCard(s.cash, isCurrent, Modifier.weight(1.5f))
         // ধার দেওয়া / ধার নেওয়া পাশাপাশি
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SummaryCard("ধার দেওয়া", s.lent, Emerald600, Emerald50, Icons.Default.TrendingUp, Modifier.weight(1f)) { detail = Detail.LENT }
-                SummaryCard("ধার নেওয়া", s.loan, Red600, Red50, Icons.Default.TrendingDown, Modifier.weight(1f)) { detail = Detail.LOAN }
-            }
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SummaryCard("ধার দেওয়া", s.lent, Emerald600, Emerald50, Icons.Default.TrendingUp, Modifier.weight(1f).fillMaxHeight()) { detail = Detail.LENT }
+            SummaryCard("ধার নেওয়া", s.loan, Red600, Red50, Icons.Default.TrendingDown, Modifier.weight(1f).fillMaxHeight()) { detail = Detail.LOAN }
         }
-        item { SummaryCard("এই মাসের খরচ", s.monthExpense, Purple600, Purple50, Icons.Default.ShoppingCart, Modifier.fillMaxWidth()) { detail = Detail.EXPENSE } }
+        SummaryCard("এই মাসের খরচ", s.monthExpense, Purple600, Purple50, Icons.Default.ShoppingCart, Modifier.fillMaxWidth().weight(1f)) { detail = Detail.EXPENSE }
         // ডিপিএস / সম্পদ পাশাপাশি
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SummaryCard("ডিপিএস মোট", s.dps, Indigo600, Indigo50, Icons.Default.Savings, Modifier.weight(1f)) { detail = Detail.DPS }
-                SummaryCard("সম্পদ", s.asset, Amber700, Amber50, Icons.Default.Landscape, Modifier.weight(1f)) { detail = Detail.ASSET }
-            }
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SummaryCard("ডিপিএস মোট", s.dps, Indigo600, Indigo50, Icons.Default.Savings, Modifier.weight(1f).fillMaxHeight()) { detail = Detail.DPS }
+            SummaryCard("সম্পদ", s.asset, Amber700, Amber50, Icons.Default.Landscape, Modifier.weight(1f).fillMaxHeight()) { detail = Detail.ASSET }
         }
         // "অন্যান্য" অ্যাকাউন্টের ব্যালেন্স ০ হলে কার্ডটি দেখানো হয় না
         if (s.other != 0.0) {
-            item { SummaryCard("অন্যান্য", s.other, Slate600, Slate100, Icons.Default.MoreHoriz, Modifier.fillMaxWidth()) { detail = Detail.OTHER } }
+            SummaryCard("অন্যান্য", s.other, Slate600, Slate100, Icons.Default.MoreHoriz, Modifier.fillMaxWidth().weight(0.7f)) { detail = Detail.OTHER }
         }
     }
 
@@ -334,7 +333,7 @@ private fun PayBakiDialog(vm: HisabViewModel, debtId: Long, onDone: () -> Unit) 
  * ব্যালেন্স লুকানো থাকে, চাপলেই দেখা যায় (কোনো বাটন নেই)।
  */
 @Composable
-private fun HeroCashCard(value: Double, isCurrent: Boolean) {
+private fun HeroCashCard(value: Double, isCurrent: Boolean, modifier: Modifier = Modifier) {
     // অ্যাপ খুললে সবসময় আয়াতের পিঠ উপরে থাকে
     var flipped by remember { mutableStateOf(false) }
     // অন্য ট্যাবে গেলে (বা ব্যাক চাপলে) কার্ড নিজে থেকে আয়াতের পিঠে ফেরে
@@ -353,9 +352,8 @@ private fun HeroCashCard(value: Double, isCurrent: Boolean) {
     )
     val density = LocalDensity.current.density
     Box(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .height(180.dp)
             .graphicsLayer {
                 rotationY = rotation
                 cameraDistance = 14f * density // ঘোরার সময় পার্স্পেক্টিভ, যাতে কার্ড কাটা না পড়ে
@@ -423,7 +421,10 @@ private fun SummaryCard(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(1.dp, Slate200),
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            Modifier.fillMaxSize().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+        ) {
             Box(
                 Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(soft),
                 contentAlignment = Alignment.Center,

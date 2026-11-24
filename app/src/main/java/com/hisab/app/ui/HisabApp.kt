@@ -2,6 +2,10 @@ package com.hisab.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,44 +86,44 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
         // ফোনের স্ট্যাটাস বারের জায়গা সিস্টেম নিজেই ছাড়ে; এখানে আবার যোগ করলে উপরে দ্বিগুণ ফাঁকা হয়
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
+            // ছোট নিচের বার: নিজের তৈরি (সিস্টেমের NavigationBar-এর উচ্চতা ৮০dp, সেটা বেশি বড়)
             Surface(color = Color.White, shadowElevation = 6.dp) {
                 Column {
                     HorizontalDivider(color = Slate200)
-                    NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
+                    Row(Modifier.fillMaxWidth().height(52.dp)) {
                         TABS.forEachIndexed { i, t ->
                             val selected = pager.currentPage == i
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { scope.launch { pager.animateScrollToPage(i) } },
-                                // আইকনের চারপাশে নিজের বক্স: আইকনের চেয়ে একটু বড়, নির্বাচিত হলে সবুজ আভা
-                                icon = {
-                                    Box(
-                                        Modifier
-                                            .size(width = 40.dp, height = 28.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(if (selected) Emerald50 else Color.Transparent),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(t.icon, contentDescription = t.label, modifier = Modifier.size(22.dp))
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        t.label,
-                                        fontSize = 10.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Emerald700,
-                                    selectedTextColor = Emerald700,
-                                    indicatorColor = Color.Transparent, // বক্স আমরা নিজেরাই আঁকছি
-                                    unselectedIconColor = Slate500,
-                                    unselectedTextColor = Slate500,
-                                ),
-                            )
+                            val tint = if (selected) Emerald700 else Slate500
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) { scope.launch { pager.animateScrollToPage(i) } },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                // আইকনের চারপাশের বক্স: আইকনের চেয়ে একটু বড়, নির্বাচিত হলে হালকা সবুজ
+                                Box(
+                                    Modifier
+                                        .size(width = 36.dp, height = 26.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (selected) Emerald50 else Color.Transparent),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(t.icon, contentDescription = t.label, tint = tint, modifier = Modifier.size(22.dp))
+                                }
+                                Text(
+                                    t.label,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = tint,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }
