@@ -91,7 +91,18 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { scope.launch { pager.animateScrollToPage(i) } },
-                                icon = { Icon(t.icon, contentDescription = t.label, modifier = Modifier.size(20.dp)) },
+                                // আইকনের চারপাশে নিজের বক্স: আইকনের চেয়ে একটু বড়, নির্বাচিত হলে সবুজ আভা
+                                icon = {
+                                    Box(
+                                        Modifier
+                                            .size(width = 44.dp, height = 32.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (selected) Emerald50 else Color.Transparent),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(t.icon, contentDescription = t.label, modifier = Modifier.size(22.dp))
+                                    }
+                                },
                                 label = {
                                     Text(
                                         t.label,
@@ -104,7 +115,7 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Emerald700,
                                     selectedTextColor = Emerald700,
-                                    indicatorColor = Emerald50,
+                                    indicatorColor = Color.Transparent, // বক্স আমরা নিজেরাই আঁকছি
                                     unselectedIconColor = Slate500,
                                     unselectedTextColor = Slate500,
                                 ),
@@ -125,7 +136,7 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
         ) { page ->
             Box(Modifier.fillMaxSize()) {
                 when (page) {
-                    0 -> DashboardScreen(vm)
+                    0 -> DashboardScreen(vm, isCurrent = pager.currentPage == 0)
                     1 -> DebtsScreen(vm)
                     2 -> TransactionsScreen(vm)
                     3 -> NotesScreen(vm)

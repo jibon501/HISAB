@@ -1,6 +1,15 @@
 package com.hisab.app.ui
 
 import androidx.compose.foundation.clickable
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.height
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,7 +84,7 @@ private data class DRow(
 
 /** হোম স্ক্রিন: সারসংক্ষেপ কার্ড। কার্ডে ট্যাপ করলে বিস্তারিত তালিকা */
 @Composable
-fun DashboardScreen(vm: HisabViewModel) {
+fun DashboardScreen(vm: HisabViewModel, isCurrent: Boolean = true) {
     val s = vm.summary
     var detail by remember { mutableStateOf<Detail?>(null) }
     var history by remember { mutableStateOf<Pair<String, String>?>(null) } // (ধরন, নাম)
@@ -86,7 +95,7 @@ fun DashboardScreen(vm: HisabViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // বড় সবুজ গ্রেডিয়েন্ট কার্ড: ক্যাশ
-        item { HeroCashCard(s.cash) { detail = Detail.CASH } }
+        item { HeroCashCard(s.cash, isCurrent) }
         // ধার দেওয়া / ধার নেওয়া পাশাপাশি
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -319,27 +328,80 @@ private fun PayBakiDialog(vm: HisabViewModel, debtId: Long, onDone: () -> Unit) 
     }
 }
 
-/** ক্যাশের বড় কার্ড: পান্না → টিল গ্রেডিয়েন্ট, সাদা লেখা */
+/**
+ * ক্যাশের বড় কার্ড (পান্না → টিল গ্রেডিয়েন্ট)। সবসময় প্রথমে আয়াত দেখায়;
+ * চাপলে কার্ড ঘুরে ক্যাশ ব্যালেন্স দেখায়, আবার চাপলে আয়াতে ফেরে।
+ * ব্যালেন্স লুকানো থাকে, চাপলেই দেখা যায় (কোনো বাটন নেই)।
+ */
 @Composable
-private fun HeroCashCard(value: Double, onClick: () -> Unit) {
+private fun HeroCashCard(value: Double, isCurrent: Boolean) {
+    // অ্যাপ খুললে সবসময় আয়াতের পিঠ উপরে থাকে
+    var flipped by remember { mutableStateOf(false) }
+    // অন্য ট্যাবে গেলে (বা ব্যাক চাপলে) কার্ড নিজে থেকে আয়াতের পিঠে ফেরে
+    LaunchedEffect(isCurrent) { if (!isCurrent) flipped = false }
+    // অ্যাপ ব্যাকগ্রাউন্ডে গেলেও ব্যালেন্স আবার লুকিয়ে যায়
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) flipped = false }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val rotation by animateFloatAsState(
+        targetValue = if (flipped) 180f else 0f,
+        animationSpec = tween(durationMillis = 600),
+        label = "cashFlip",
+    )
+    val density = LocalDensity.current.density
     Box(
         Modifier
             .fillMaxWidth()
+            .height(180.dp)
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 14f * density // ঘোরার সময় পার্স্পেক্টিভ, যাতে কার্ড কাটা না পড়ে
+            }
             .clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(listOf(Emerald800, Teal700)))
-            .clickable(onClick = onClick)
-            .padding(20.dp),
+            .clickable { flipped = !flipped }
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("ক্যাশ ব্যালেন্স", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Emerald100)
-                Text(tk(value), fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                Text("বিস্তারিত দেখতে ট্যাপ করুন", fontSize = 11.sp, color = Emerald200)
+        if (rotation <= 90f) {
+            // সামনের পিঠ: আরবি আয়াত (একটু বড়) ও নিচে বাংলা অর্থ (ছোট)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "ٱلْمَالُ وَٱلْبَنُونَ زِينَةُ ٱلْحَيَوٰةِ ٱلدُّنْيَا ۖ وَٱلْبَـٰقِيَـٰتُ ٱلصَّـٰلِحَـٰتُ خَيْرٌ عِندَ رَبِّكَ ثَوَابًا وَخَيْرٌ أَمَلًا",
+                    fontSize = 19.sp,
+                    lineHeight = 34.sp, // হরকত কাটা না পড়তে লাইনের উচ্চতা বেশি
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                )
+                Text(
+                    "সম্পদ ও সন্তান-সন্ততি দুনিয়ার জীবনের শোভা। আর স্থায়ী সৎকাজ তোমার রবের নিকট প্রতিদানে উত্তম এবং প্রত্যাশাতেও উত্তম। (আল-কাহফ ১৮:৪৬)",
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    color = Emerald100,
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                )
             }
-            Box(
-                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Default.Payments, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp)) }
+        } else {
+            // পেছনের পিঠ: ঘোরানো অবস্থায় লেখা উল্টে না যেতে আবার ১৮০° ঘোরানো
+            Row(
+                Modifier.fillMaxWidth().graphicsLayer { rotationY = 180f },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("ক্যাশ ব্যালেন্স", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Emerald100)
+                    Text(tk(value), fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                }
+                Box(
+                    Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Default.Payments, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp)) }
+            }
         }
     }
 }
