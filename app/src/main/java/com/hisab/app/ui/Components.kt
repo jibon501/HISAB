@@ -93,6 +93,8 @@ fun FormDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     centerTitle: Boolean = false,
+    // দিলে বাঁ পাশের "বাতিল" বাটনের জায়গায় লাল "মুছুন" বাটন আসে
+    onDelete: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     AlertDialog(
@@ -109,7 +111,13 @@ fun FormDialog(
             )
         },
         confirmButton = { TextButton(onClick = onConfirm) { Text(confirmText) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("বাতিল") } },
+        dismissButton = {
+            if (onDelete != null) {
+                TextButton(onClick = onDelete) { Text("মুছুন", color = MaterialTheme.colorScheme.error) }
+            } else {
+                TextButton(onClick = onDismiss) { Text("বাতিল") }
+            }
+        },
     )
 }
 

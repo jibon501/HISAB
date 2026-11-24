@@ -236,6 +236,7 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
             },
             allAccounts = vm.accounts,
             onEditEntry = { ref, amount, date, accountId -> vm.editHistoryEntry(ref, amount, date, accountId) },
+            onDeleteEntry = { ref -> vm.deleteTxn(ref) },
             onDelete = {
                 vm.deletePerson(r.person)
                 editPerson = null
@@ -262,6 +263,7 @@ private fun DebtEditDialog(
     onNewDebt: (kind: String, name: String, note: String, splits: List<Pair<Long?, Double>>) -> Unit,
     allAccounts: List<Account>, // লাইন এডিটে অ্যাকাউন্ট বদলানোর জন্য
     onEditEntry: (ref: Long, amount: Double, date: java.time.LocalDate, accountId: Long?) -> Unit,
+    onDeleteEntry: (ref: Long) -> Unit, // লাইন মোছা (ref ঋণাত্মক = পুরো ধার, ধনাত্মক = একটি ফেরত)
     onDelete: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -334,6 +336,10 @@ private fun DebtEditDialog(
             initialAccountId = h.accountId,
             // জমা (delta < 0) নাকি দেওয়া/কাটা (delta > 0)
             accountLabel = if (h.delta < 0) "কোন অ্যাকাউন্টে জমা হলো" else "কোন অ্যাকাউন্ট থেকে দেওয়া হলো",
+            onDelete = {
+                onDeleteEntry(h.ref)
+                editingEntry = null
+            },
             onSave = { amount, date, accountId ->
                 onEditEntry(h.ref, amount, date, accountId)
                 editingEntry = null

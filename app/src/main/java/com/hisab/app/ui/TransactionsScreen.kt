@@ -476,9 +476,11 @@ internal fun EditEntryDialog(
     accounts: List<Account> = emptyList(),
     initialAccountId: Long? = null, // null হলে (একাধিক ভাগ) অ্যাকাউন্ট বদলানো যায় না
     accountLabel: String = "অ্যাকাউন্ট",
+    onDelete: (() -> Unit)? = null, // দিলে "বাতিল"-এর জায়গায় "মুছুন" বাটন আসে (চাপলে আগে নিশ্চিত করে)
     onSave: (amount: Double, date: LocalDate, accountId: Long?) -> Unit,
 ) {
     val ctx = LocalContext.current
+    var confirmDelete by remember { mutableStateOf(false) }
     var account by remember(initialAccountId) { mutableStateOf(accounts.firstOrNull { it.id == initialAccountId }) }
     var amount by remember(initialAmount, initialDate) {
         mutableStateOf(initialAmount.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() })
@@ -493,6 +495,7 @@ internal fun EditEntryDialog(
         centerTitle = true,
         confirmText = "সংরক্ষণ",
         onDismiss = onDismiss,
+        onDelete = if (onDelete != null) ({ confirmDelete = true }) else null,
         onConfirm = {
             val a = amount.toDoubleOrNull()
             if (a == null || a <= 0) ctx.toast("সঠিক পরিমাণ দিন") else onSave(a, date, account?.id)
@@ -511,6 +514,20 @@ internal fun EditEntryDialog(
         OutlinedButton(onClick = { pickDate = true }, modifier = Modifier.fillMaxWidth()) {
             Text("তারিখ: ${fmtDate(date.toString())}")
         }
+    }
+
+    if (confirmDelete && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("এই লাইনটি মুছবেন?") },
+            text = { Text("মুছলে অ্যাকাউন্টের ব্যালেন্স আগের অবস্থায় ফিরবে। প্রথম এন্ট্রি (ধার দেওয়া/নেওয়া) মুছলে সেই ধারের সব ফেরতও মুছে যাবে।") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) {
+                    Text("মুছুন", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("বাতিল") } },
+        )
     }
 
     if (pickDate) {
