@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- অ্যান্ড্রয়েড ৯ ও পুরনো ফোনে Documents/আমার হিসাব ফোল্ডারে ব্যাকআপের জন্য; নতুন ফোনে লাগে না -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
