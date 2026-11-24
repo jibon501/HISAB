@@ -258,6 +258,21 @@ class HisabViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** নাম বদল (দরকার হলে) ও একই ব্যক্তির নামে নতুন ধার, একসঙ্গে */
+    fun addDebtForPerson(
+        oldName: String,
+        newName: String,
+        kind: String,
+        note: String,
+        splits: List<Pair<Long?, Double>>,
+    ) = exec {
+        if (newName != oldName) {
+            db.renameDebtPerson(Kind.LENT, oldName, newName)
+            db.renameDebtPerson(Kind.LOAN, oldName, newName)
+        }
+        db.addDebt(kind, newName, note, splits, java.time.LocalDate.now())
+    }
+
     /** সব ডেটা xlsx আকারে লেখে। শেষে done(সফল হয়েছে কি না) */
     fun exportXlsx(out: java.io.OutputStream, done: (Boolean) -> Unit) {
         viewModelScope.launch {
