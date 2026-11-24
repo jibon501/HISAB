@@ -86,7 +86,7 @@ fun ExcelBar(vm: HisabViewModel, onTransfer: () -> Unit) {
     ) { uri: Uri? -> if (uri != null) pendingImport = uri }
 
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
