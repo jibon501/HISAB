@@ -49,7 +49,7 @@ fun CategoriesDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
-            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = 420.dp).autoVerticalScroll()) {
                 listOf("expense" to "খরচের খাত", "income" to "আয়ের খাত").forEach { (kind, label) ->
                     Row(
                         Modifier.fillMaxWidth().padding(top = 8.dp),

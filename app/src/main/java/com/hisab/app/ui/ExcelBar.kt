@@ -109,7 +109,7 @@ fun ExcelBar(vm: HisabViewModel, onTransfer: () -> Unit) {
             onDismissRequest = { picking = false },
             title = { Text("ব্যাকআপ বেছে নিন") },
             text = {
-                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                Column(Modifier.heightIn(max = 360.dp).autoVerticalScroll()) {
                     Text("Documents/${BackupStore.FOLDER}", fontSize = 12.sp, color = Color.Gray)
                     if (backups.isEmpty()) {
                         Text("এই ফোল্ডারে কোনো ব্যাকআপ পাওয়া যায়নি", Modifier.padding(vertical = 16.dp))

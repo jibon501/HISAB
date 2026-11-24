@@ -1,5 +1,7 @@
 package com.hisab.app.ui
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -81,6 +83,16 @@ private val BN: Locale = Locale.forLanguageTag("bn-BD")
 /** টাকার ফরম্যাট, যেমন ৳ ১,২৫০ */
 fun tk(v: Double): String = "৳ " + String.format(BN, "%,.0f", v)
 
+/** জায়গা বাড়তি না হলে (সব আঁটে) স্ক্রল বন্ধ; উপচে পড়লে তবেই স্ক্রল চলে */
+@Composable
+fun Modifier.autoVerticalScroll(): Modifier {
+    val st = rememberScrollState()
+    return this.verticalScroll(st, enabled = st.maxValue > 0)
+}
+
+/** তালিকার জন্য: সব আঁটলে userScrollEnabled বন্ধ রাখার শর্ত */
+val LazyListState.overflowing: Boolean get() = canScrollForward || canScrollBackward
+
 fun Context.toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
 // ---------- কমন UI ----------
@@ -105,7 +117,7 @@ fun FormDialog(
         },
         text = {
             androidx.compose.foundation.layout.Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.autoVerticalScroll(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 content = content,
             )

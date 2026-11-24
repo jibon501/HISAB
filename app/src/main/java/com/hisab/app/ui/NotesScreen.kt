@@ -2,6 +2,7 @@
 
 package com.hisab.app.ui
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -59,7 +60,10 @@ fun NotesScreen(vm: HisabViewModel) {
             if (vm.notes.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("কোনো নোট নেই") }
             } else {
+                val ls = rememberLazyListState()
                 LazyColumn(
+                    state = ls,
+                    userScrollEnabled = ls.overflowing,
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                 ) {

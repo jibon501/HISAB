@@ -2,6 +2,7 @@
 
 package com.hisab.app.ui
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -147,7 +148,8 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("কোনো হিসাব নেই") }
             } else {
                 // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি মোটের নিচে ঢাকা না পড়ে
-                LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                val ls = rememberLazyListState()
+                LazyColumn(state = ls, userScrollEnabled = ls.overflowing, contentPadding = PaddingValues(bottom = 88.dp)) {
                     itemsIndexed(rows, key = { _, r -> r.person }) { i, r ->
                         val done = kotlin.math.abs(r.net) <= eps
                         val dim = Color.Gray
@@ -304,7 +306,7 @@ private fun DebtEditDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.autoVerticalScroll()) {
                 // শুধু দেখার অবস্থা: নাম মাঝখানে, তিন কলাম, নিচে মোট
                 // লাইনে চাপলে সেই লাইনের টাকা ও তারিখ এডিট
                 DebtTable(person, entries, onEntryClick = { editingEntry = it })

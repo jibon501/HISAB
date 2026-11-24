@@ -2,6 +2,7 @@
 
 package com.hisab.app.ui
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -158,7 +159,8 @@ fun TransactionsScreen(vm: HisabViewModel, addTick: Int = 0) {
                 }
             } else {
                 // নিচে একটু ফাঁকা রাখা হয়েছে, যাতে শেষ সারি (+) বাটন ও মোটের নিচে ঢাকা না পড়ে
-                LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                val ls = rememberLazyListState()
+                LazyColumn(state = ls, userScrollEnabled = ls.overflowing, contentPadding = PaddingValues(bottom = 88.dp)) {
                     itemsIndexed(vm.txns, key = { _, t -> t.id }) { i, t -> TxnRow(t, i) { toDelete = t } }
                 }
             }

@@ -1,5 +1,6 @@
 package com.hisab.app.ui
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -198,7 +199,8 @@ private fun DetailDialog(
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 if (rows.isNotEmpty()) {
-                    LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    val ls = rememberLazyListState()
+                    LazyColumn(Modifier.heightIn(max = 360.dp), state = ls, userScrollEnabled = ls.overflowing) {
                         items(rows) { row ->
                             val tap = row.kind
                             val pay = row.payDebtId
@@ -243,7 +245,7 @@ private fun DebtHistoryDialog(vm: HisabViewModel, kind: String, person: String, 
     AlertDialog(
         onDismissRequest = onDismiss,
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.autoVerticalScroll()) {
                 DebtTable(person, items)
             }
         },
@@ -273,7 +275,7 @@ private fun PayBakiDialog(vm: HisabViewModel, debtId: Long, onDone: () -> Unit) 
         title = { Text("বাকি পরিশোধ") },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.autoVerticalScroll(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text("${debt.person} • বাকি ${tk(debt.remaining)}")

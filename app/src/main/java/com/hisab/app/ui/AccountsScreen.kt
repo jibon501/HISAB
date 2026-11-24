@@ -2,6 +2,7 @@
 
 package com.hisab.app.ui
 
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.CardDefaults
@@ -76,7 +77,8 @@ fun AccountsScreen(vm: HisabViewModel) {
             }
         },
     ) { pad ->
-        LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(bottom = 88.dp)) {
+        val ls = rememberLazyListState()
+        LazyColumn(Modifier.padding(pad), state = ls, userScrollEnabled = ls.overflowing, contentPadding = PaddingValues(bottom = 88.dp)) {
             item(key = "excel_bar") { ExcelBar(vm) { showTransfer = true } }
             typeOrder.forEach { type ->
                 val label = typeLabel(type)
@@ -327,7 +329,8 @@ private fun AccountTxnsDialog(
             if (txns.isEmpty()) {
                 Text("কোনো লেনদেন নেই")
             } else {
-                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                val ls2 = rememberLazyListState()
+                LazyColumn(Modifier.heightIn(max = 420.dp), state = ls2, userScrollEnabled = ls2.overflowing) {
                     items(txns, key = { it.id }) { t ->
                         val credit = t.type == "credit"
                         val color = if (t.cleared) Color.Gray else if (credit) Color(0xFF2E7D32) else Color(0xFFC62828)
