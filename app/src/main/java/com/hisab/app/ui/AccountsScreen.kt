@@ -78,7 +78,7 @@ fun AccountsScreen(vm: HisabViewModel) {
         },
     ) { pad ->
         val ls = rememberLazyListState()
-        LazyColumn(Modifier.padding(pad), state = ls, userScrollEnabled = ls.overflowing, contentPadding = PaddingValues(bottom = 88.dp)) {
+        LazyColumn(Modifier.padding(pad), state = ls, userScrollEnabled = ls.overflowing, contentPadding = PaddingValues(bottom = 72.dp)) {
             item(key = "excel_bar") { ExcelBar(vm) { showTransfer = true } }
             typeOrder.forEach { type ->
                 val label = typeLabel(type)
@@ -90,24 +90,24 @@ fun AccountsScreen(vm: HisabViewModel) {
                             color = Slate500,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 6.dp),
+                            modifier = Modifier.padding(start = 20.dp, top = 8.dp, bottom = 2.dp),
                         )
                     }
                     items(group, key = { it.id }) { a ->
                         // সাদা ঘেরা গোল-কোণা কার্ড; চাপলে এই অ্যাকাউন্টের সব লেনদেন দেখায়
                         Card(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
                                 .clickable { viewing = a },
                             shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             border = BorderStroke(1.dp, Slate200),
                         ) {
                             Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                AccountAvatar(a)
+                                AccountAvatar(a, 32.dp)
                                 Text(a.name, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, color = Slate900)
                                 Text(
                                     tk(a.balance),
