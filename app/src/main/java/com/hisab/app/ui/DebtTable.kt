@@ -19,6 +19,13 @@ import com.hisab.app.data.HistoryItem
 import com.hisab.app.data.debtTotal
 import com.hisab.app.data.fmtDate
 
+/** তারিখ dd-mm-yy আকারে (বাংলা অঙ্কে), যেমন ২৪-১১-২৬ */
+fun fmtDateShort(iso: String): String {
+    val p = iso.take(10).split("-")
+    val text = if (p.size == 3) "${p[2]}-${p[1]}-${p[0].takeLast(2)}" else iso.take(10)
+    return text.map { if (it in '0'..'9') '\u09E6' + (it - '0') else it }.joinToString("")
+}
+
 /**
  * একজনের ধার-হিসাব: নাম মাঝখানে, তিন কলাম (তারিখ | ধরন: দিছি/নিছি/ফেরত | পরিমাণ),
  * আর পরিমাণ কলামের নিচে "মোট=..."।
@@ -68,6 +75,10 @@ fun DebtTable(person: String, entries: List<HistoryItem>, onEntryClick: ((Histor
             val (label, amount) = debtTotal(total)
             if (kotlin.math.abs(total) <= 0.0001) Text("সমস্ত দেনা-পাওনা ক্লিয়ার", fontWeight = FontWeight.Bold)
             else Text("$label=${tk(amount)}", fontWeight = FontWeight.Bold)
+        }
+        // কমেন্টস থাকলে মোটের নিচে "লেনদেনের তারিখ - কমেন্টস"
+        entries.filter { it.comment.isNotBlank() }.forEach { h ->
+            Text("${fmtDateShort(h.date)} - ${h.comment}", fontSize = 12.sp, color = Color.Gray)
         }
     }
 }

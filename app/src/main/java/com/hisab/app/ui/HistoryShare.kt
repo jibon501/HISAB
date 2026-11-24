@@ -23,7 +23,8 @@ fun buildHistoryBitmap(person: String, items: List<HistoryItem>): Bitmap {
     val rowH = 72f
     val headH = 150f
     val footH = 110f
-    val height = (headH + rowH * items.size + footH).toInt()
+    val comments = items.filter { it.comment.isNotBlank() }
+    val height = (headH + rowH * items.size + footH + 40f * comments.size).toInt()
 
     val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
@@ -58,6 +59,12 @@ fun buildHistoryBitmap(person: String, items: List<HistoryItem>): Bitmap {
     val (totalLabel, totalAmount) = debtTotal(remaining)
     val rest = "$totalLabel=${tk(totalAmount)}"
     c.drawText(rest, width - pad - bold.measureText(rest), y + 20f, bold)
+    // কমেন্টস থাকলে মোটের নিচে "তারিখ - কমেন্টস"
+    var cy = y + 70f
+    comments.forEach { h ->
+        c.drawText("${fmtDateShort(h.date)} - ${h.comment}", pad, cy, sub)
+        cy += 40f
+    }
     return bmp
 }
 
@@ -109,6 +116,9 @@ fun shareText(ctx: Context, person: String, items: List<HistoryItem>) {
         }
         val (totalLabel, totalAmount) = debtTotal(remaining)
         append("$totalLabel=${tk(totalAmount)}")
+        items.filter { it.comment.isNotBlank() }.forEach { h ->
+            append("\n${fmtDateShort(h.date)} - ${h.comment}")
+        }
     }
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"

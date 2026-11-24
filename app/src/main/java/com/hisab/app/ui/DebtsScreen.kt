@@ -222,11 +222,16 @@ private fun DebtsPane(vm: HisabViewModel, kind: String) {
             payKind = payKind,
             canPay = kotlin.math.abs(r.net) > eps && all.any { it.person == r.person && it.kind == payKind },
             entries = vm.personHistory(r.person),
-            // ধার পরিশোধে টাকা বেরিয়ে যায়, ধার ফেরত পেলে টাকা ঢোকে
-            accounts = if (payKind == Kind.LOAN) vm.accounts.withMoney() else vm.accounts,
+            // দিয়েছি → টাকা বেরোয় (টাকা আছে এমন অ্যাকাউন্ট), নিয়েছি → টাকা ঢোকে (সব অ্যাকাউন্ট)
+            giveAccounts = vm.accounts.withMoney(),
+            takeAccounts = vm.accounts,
             onDismiss = { editPerson = null },
             onSave = { name, splits ->
                 vm.savePersonEdit(r.person, name, payKind, splits)
+                editPerson = null
+            },
+            onNewDebt = { newKind, name, note, splits ->
+                vm.addDebtForPerson(r.person, name, newKind, note, splits)
                 editPerson = null
             },
             allAccounts = vm.accounts,
@@ -250,9 +255,11 @@ private fun DebtEditDialog(
     payKind: String, // যে ধরনের হিসাবে ফেরত মেলানো হবে: সে দেবে → lent, আমি দেব → loan
     canPay: Boolean, // বাকি থাকলে তবেই ফেরত যোগ করা যায়
     entries: List<HistoryItem>,
-    accounts: List<Account>,
+    giveAccounts: List<Account>,
+    takeAccounts: List<Account>,
     onDismiss: () -> Unit,
     onSave: (name: String, splits: List<Pair<Long, Double>>) -> Unit,
+    onNewDebt: (kind: String, name: String, note: String, splits: List<Pair<Long?, Double>>) -> Unit,
     allAccounts: List<Account>, // লাইন এডিটে অ্যাকাউন্ট বদলানোর জন্য
     onEditEntry: (ref: Long, amount: Double, date: java.time.LocalDate, accountId: Long?) -> Unit,
     onDelete: () -> Unit,
@@ -339,9 +346,11 @@ private fun DebtEditDialog(
             person = person,
             payKind = payKind,
             canPay = canPay,
-            accounts = accounts,
+            giveAccounts = giveAccounts,
+            takeAccounts = takeAccounts,
             onCancel = { adding = false },
             onSave = onSave,
+            onNewDebt = onNewDebt,
         )
     }
 
@@ -360,47 +369,73 @@ private fun DebtEditDialog(
     }
 }
 
-/** "+" চাপলে ছোট ফর্ম ডায়ালগ: নাম বদল ও ফেরতের লাইন; নিচে "সংরক্ষণ" ও "বাতিল" */
+/**
+ * "+" চাপলে ছোট ফর্ম। উপরে "নিয়েছি" | "দিয়েছি" বাটন, যেটা বাছা হবে সেইভাবে লেনদেন হবে:
+ * বাকি আছে এমন হিসাবের উল্টো দিকটা ফেরত (শোধ), একই দিকটা নতুন ধার (নোটসহ)।
+ * নিচে "সংরক্ষণ" ও "বাতিল"।
+ */
 @Composable
 private fun DebtAddScreen(
     person: String,
-    payKind: String,
+    payKind: String, // ফেরত কোন ধরনের হিসাবে মিলবে: সে দেবে → lent, আমি দেব → loan
     canPay: Boolean,
-    accounts: List<Account>,
+    giveAccounts: List<Account>,
+    takeAccounts: List<Account>,
     onCancel: () -> Unit,
     onSave: (name: String, splits: List<Pair<Long, Double>>) -> Unit,
+    onNewDebt: (kind: String, name: String, note: String, splits: List<Pair<Long?, Double>>) -> Unit,
 ) {
     val ctx = LocalContext.current
-    val lent = payKind == Kind.LENT
-    val done = !canPay
+    // শুরুতে ফেরতের দিকটাই বাছা: সে দেবে → আমি "নিয়েছি", আমি দেব → আমি "দিয়েছি"
+    var give by remember(person) { mutableStateOf(payKind != Kind.LENT) }
     var name by remember(person) { mutableStateOf(person) }
+    var note by remember(person) { mutableStateOf("") }
     var lines by remember(person) { mutableStateOf(listOf(SplitLine())) }
+    // বাছা দিকটা বাকি হিসাবের উল্টো হলে ফেরত, নইলে (বা কিছু বাকি না থাকলে) নতুন ধার
+    val isRepay = canPay && (give == (payKind == Kind.LOAN))
+    val newKind = if (give) Kind.LENT else Kind.LOAN
 
     FormDialog(
-        title = repayLabel(payKind),
+        title = if (isRepay) repayLabel(payKind) else debtLabel(newKind),
         centerTitle = true,
         confirmText = "সংরক্ষণ",
         onDismiss = onCancel,
         onConfirm = {
             val n = name.trim()
             val splits = lines.splits()
-            val total = splits.sumOf { it.second }
             when {
                 n.isEmpty() -> ctx.toast("নাম খালি রাখা যাবে না")
                 splits.any { it.first == null } -> ctx.toast("প্রতিটি টাকার জন্য অ্যাকাউন্ট সিলেক্ট করুন")
-                else -> onSave(n, splits.map { (it.first as Account).id to it.second })
+                isRepay -> onSave(n, splits.map { (it.first as Account).id to it.second })
+                splits.isEmpty() -> ctx.toast("টাকার পরিমাণ দিন")
+                else -> onNewDebt(newKind, n, note.trim(), splits.map { it.first?.id to it.second })
             }
         },
     ) {
-        TextInput(name, { name = it }, "নাম")
-        if (!done) {
-            SplitLines(
-                accounts = accounts,
-                lines = lines,
-                onChange = { lines = it },
-                accountLabel = if (lent) "অ্যাকাউন্টে জমা হবে" else "অ্যাকাউন্ট থেকে কাটবে",
+        // নিয়েছি | দিয়েছি; বদলালে টাকার লাইন নতুন করে শুরু (অ্যাকাউন্টের তালিকা আলাদা বলে)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !give,
+                onClick = { if (give) { give = false; lines = listOf(SplitLine()) } },
+                label = { Text("নিয়েছি", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                modifier = Modifier.weight(1f),
+            )
+            FilterChip(
+                selected = give,
+                onClick = { if (!give) { give = true; lines = listOf(SplitLine()) } },
+                label = { Text("দিয়েছি", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                modifier = Modifier.weight(1f),
             )
         }
+        TextInput(name, { name = it }, "নাম")
+        SplitLines(
+            accounts = if (give) giveAccounts else takeAccounts,
+            lines = lines,
+            onChange = { lines = it },
+            accountLabel = if (give) "অ্যাকাউন্ট থেকে কাটবে" else "অ্যাকাউন্টে জমা হবে",
+        )
+        // নোট শুধু নতুন ধারে; এটাই ধার ট্যাবে মোটের নিচে কমেন্টস হয়ে দেখা যায়
+        if (!isRepay) TextInput(note, { note = it }, "নোট (কমেন্টস)")
     }
 }
 
