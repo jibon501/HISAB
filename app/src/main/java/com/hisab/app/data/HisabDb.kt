@@ -67,6 +67,7 @@ data class HistoryItem(
     val payment: Boolean,
     val delta: Double,
     val accountId: Long? = null, // কোন অ্যাকাউন্টে জমা/কাটা (একাধিক ভাগ থাকলে null)
+    val comment: String = "", // ধারের সঙ্গে লেখা নোট (কমেন্টস)
     val ref: Long = 0, // এডিটের জন্য: ফেরত হলে লেনদেনের আইডি (+), ধার/দেওয়ার প্রথম এন্ট্রি হলে −(হিসাবের আইডি)
 )
 
@@ -483,7 +484,8 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
             """
             SELECT date, total, kind, id,
                    (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(account_id) END
-                    FROM txns WHERE debt_id = debts.id AND is_payment = 0)
+                    FROM txns WHERE debt_id = debts.id AND is_payment = 0),
+                   note
             FROM debts WHERE person = ? AND kind IN ('lent','loan')
             """.trimIndent(),
             arrayOf(person),
@@ -491,7 +493,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
             while (c.moveToNext()) {
                 val kind = c.getString(2)
                 val amount = c.getDouble(1)
-                out += HistoryItem(c.getString(0), debtLabel(kind), amount, false, if (kind == Kind.LENT) amount else -amount, if (c.isNull(4)) null else c.getLong(4), -c.getLong(3))
+                out += HistoryItem(c.getString(0), debtLabel(kind), amount, false, if (kind == Kind.LENT) amount else -amount, if (c.isNull(4)) null else c.getLong(4), c.getString(5).orEmpty().trim(), -c.getLong(3))
             }
         }
         db.rawQuery(
@@ -504,7 +506,7 @@ class HisabDb(context: Context) : SQLiteOpenHelper(context, "hisab.db", null, 6)
             while (c.moveToNext()) {
                 val kind = c.getString(2)
                 val amount = c.getDouble(1)
-                out += HistoryItem(c.getString(0), repayLabel(kind), amount, true, if (kind == Kind.LENT) -amount else amount, c.getLong(4), c.getLong(3))
+                out += HistoryItem(c.getString(0), repayLabel(kind), amount, true, if (kind == Kind.LENT) -amount else amount, c.getLong(4), "", c.getLong(3))
             }
         }
         return out.sortedBy { it.date }
