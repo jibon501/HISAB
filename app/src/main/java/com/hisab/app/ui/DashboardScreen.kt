@@ -363,20 +363,20 @@ private fun HeroCashCard(value: Double, isCurrent: Boolean) {
             .clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(listOf(Emerald800, Teal700)))
             .clickable { flipped = !flipped }
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
         if (rotation <= 90f) {
             // সামনের পিঠ: আরবি আয়াত (একটু বড়) ও নিচে বাংলা অর্থ (ছোট)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "ٱلْمَالُ وَٱلْبَنُونَ زِينَةُ ٱلْحَيَوٰةِ ٱلدُّنْيَا ۖ وَٱلْبَـٰقِيَـٰتُ ٱلصَّـٰلِحَـٰتُ خَيْرٌ عِندَ رَبِّكَ ثَوَابًا وَخَيْرٌ أَمَلًا",
-                    fontSize = 19.sp,
-                    lineHeight = 34.sp, // হরকত কাটা না পড়তে লাইনের উচ্চতা বেশি
+                    "ٱلْمَالُ وَٱلْبَنُونَ زِينَةُ ٱلْحَيَوٰةِ ٱلدُّنْيَا ۖ\nوَٱلْبَـٰقِيَـٰتُ ٱلصَّـٰلِحَـٰتُ خَيْرٌ عِندَ رَبِّكَ ثَوَابًا وَخَيْرٌ أَمَلًا",
+                    fontSize = 15.sp,
+                    lineHeight = 28.sp, // হরকত কাটা না পড়তে লাইনের উচ্চতা বেশি
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     textAlign = TextAlign.Center,
-                    maxLines = 3,
+                    maxLines = 2, // ঠিক দুই লাইন
                 )
                 Text(
                     "সম্পদ ও সন্তান-সন্ততি দুনিয়ার জীবনের শোভা। আর স্থায়ী সৎকাজ তোমার রবের নিকট প্রতিদানে উত্তম এবং প্রত্যাশাতেও উত্তম। (আল-কাহফ ১৮:৪৬)",

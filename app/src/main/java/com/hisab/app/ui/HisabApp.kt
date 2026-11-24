@@ -95,7 +95,7 @@ fun HisabApp(vm: HisabViewModel = viewModel()) {
                                 icon = {
                                     Box(
                                         Modifier
-                                            .size(width = 44.dp, height = 32.dp)
+                                            .size(width = 40.dp, height = 28.dp)
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(if (selected) Emerald50 else Color.Transparent),
                                         contentAlignment = Alignment.Center,
